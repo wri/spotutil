@@ -3,6 +3,7 @@ import argparse
 
 from utilities.spot_instance import Instance
 
+
 def main():
 
     # Parse commandline arguments
@@ -24,13 +25,11 @@ def main():
 
     instance.start()
 
-    instance.run(args.prep_script)
+    instance.run(args.prep_script, 'prep')
 
-    instance.run(args.main_script)
-
-    instance.terminate()
-
+    instance.run(args.main_script, 'main')
 
 
 if __name__ == '__main__':
-	main()
+    main()
+
