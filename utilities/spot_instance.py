@@ -15,12 +15,18 @@ class Instance(object):
         self.price = args.price
         self.disk_size = args.disk_size
 
+        cwd = os.path.dirname(os.path.realpath(__file__))
+        self.root_dir = os.path.dirname(cwd)
+
         self.spot_request = None
         self.instance = None
+        self.pem_file = None
 
         print 'Creating a instance type {} from {}'.format(self.instance_type, self.ami_id)
 
     def start(self):
+
+        self.get_pem()
 
         self.make_request()
 
@@ -29,18 +35,22 @@ class Instance(object):
     def run(self, local_file_path, proc_type):
 
         if local_file_path:
-            cwd = os.path.dirname(os.path.realpath(__file__))
-            root_dir = os.path.dirname(cwd)
 
-            utilities_dir = os.path.join(root_dir, 'utilities')
+            utilities_dir = os.path.join(self.root_dir, 'utilities')
             full_local_path = os.path.realpath(local_file_path)
             fab_cmd = 'start_process:{},{}'.format(full_local_path, proc_type)
 
-            pem_file = os.path.join(root_dir, 'tokens', 'chofmann-wri.pem')
             host_name = 'ubuntu@{0}'.format(self.instance.ip_address)
 
-            cmd = ['fab', fab_cmd, '-i', pem_file, '-H', host_name]
+            cmd = ['fab', fab_cmd, '-i', self.pem_file, '-H', host_name]
             subprocess.check_call(cmd, cwd=utilities_dir)
+
+    def get_pem(self):
+        self.pem_file = os.path.join(self.root_dir, 'tokens', 'chofmann-wri.pem')
+
+        if not os.path.exists(self.pem_file):
+            raise ValueError('Could not find token {}'.format(self.pem_file))
+
 
     def make_request(self):
         print 'requesting spot instance'
