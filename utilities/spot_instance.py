@@ -4,6 +4,9 @@ import time
 import subprocess
 from retrying import retry
 
+# check if fabric is installed
+from fabric.api import env
+
 ec2_conn = boto.ec2.connect_to_region('us-east-1')
 
 
@@ -38,9 +41,11 @@ class Instance(object):
 
             utilities_dir = os.path.join(self.root_dir, 'utilities')
             full_local_path = os.path.realpath(local_file_path)
+            print "this is the full local path: {}".format(full_local_path)
             fab_cmd = 'start_process:{},{}'.format(full_local_path, proc_type)
 
             host_name = 'ubuntu@{0}'.format(self.instance.ip_address)
+            print "host address is: {}".format(host_name)
 
             cmd = ['fab', fab_cmd, '-i', self.pem_file, '-H', host_name]
             subprocess.check_call(cmd, cwd=utilities_dir)
