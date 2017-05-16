@@ -17,7 +17,7 @@ def main():
 
     # Args related to scripts that fab will run
     parser.add_argument('--prep-script', '-p', help='script that should run first on the instance')
-    parser.add_argument('--main-script', '-m', required=True, help='main multiprocessing script')
+    parser.add_argument('--main-script', '-m', help='main multiprocessing script')
 
     args = parser.parse_args()
 
