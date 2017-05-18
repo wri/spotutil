@@ -17,6 +17,7 @@ class Instance(object):
         self.ami_id = args.ami_id
         self.price = args.price
         self.disk_size = args.disk_size
+        self.tag = args.tag
 
         cwd = os.path.dirname(os.path.realpath(__file__))
         self.root_dir = os.path.dirname(cwd)
@@ -24,7 +25,7 @@ class Instance(object):
         self.spot_request = None
         self.instance = None
         self.pem_file = None
-
+        
         print 'Creating a instance type {} from {}'.format(self.instance_type, self.ami_id)
 
     def start(self):
@@ -34,7 +35,7 @@ class Instance(object):
         self.make_request()
 
         self.wait_for_instance()
-
+        
     def run(self, local_file_path, proc_type):
 
         if local_file_path:
@@ -52,7 +53,7 @@ class Instance(object):
 
     def get_pem(self):
         self.pem_file = os.path.join(self.root_dir, 'tokens', 'chofmann-wri.pem')
-
+        
         if not os.path.exists(self.pem_file):
             raise ValueError('Could not find token {}'.format(self.pem_file))
 
@@ -100,8 +101,9 @@ class Instance(object):
         print 'Sleeping for 60 seconds to make sure server is ready'
         time.sleep(60)
 
-        self.instance.add_tag("Name", 'TEMP-TSV-SPOT')
+        self.instance.add_tag("Name", self.tag)
 
+        
     def create_hard_disk(self):
 
         dev_sda1 = boto.ec2.blockdevicemapping.EBSBlockDeviceType()
