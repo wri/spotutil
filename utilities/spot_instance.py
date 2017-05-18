@@ -83,6 +83,14 @@ class Instance(object):
 
             if state == 'active':
                 running = True
+                
+                # windows
+                if os.name == 'nt':
+                    user = os.getenv('username')
+                else:
+                    user = os.getlogin()
+                    
+                self.spot_request.add_tag('User', user)
 
     @retry(wait_fixed=2000, stop_max_attempt_number=10)
     def wait_for_instance(self):
@@ -97,6 +105,8 @@ class Instance(object):
             time.sleep(5)
             status = self.instance.update()
             print 'Instance {} is {}'.format(self.instance.id, status)
+            
+        print 'Server IP is {}'.format(self.instance.ip_address)
 
         print 'Sleeping for 60 seconds to make sure server is ready'
         time.sleep(60)
