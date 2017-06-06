@@ -32,7 +32,8 @@ def main():
 
     instance.run(args.main_script, 'main')
     
-    util.launch_putty(instance.instance.ip_address)
+    if args.putty:
+        util.launch_putty(instance.instance.ip_address)
 
 
 if __name__ == '__main__':
