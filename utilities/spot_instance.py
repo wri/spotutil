@@ -88,7 +88,7 @@ class Instance(object):
                 if os.name == 'nt':
                     user = os.getenv('username')
                 else:
-                    user = os.getlogin()
+                    user = os.getenv('USER')
                     
                 self.spot_request.add_tag('User', user)
 
