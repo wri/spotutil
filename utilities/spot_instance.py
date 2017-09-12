@@ -1,5 +1,6 @@
 import os
 import boto.ec2
+import socket
 import time
 import subprocess
 from retrying import retry
@@ -112,6 +113,8 @@ class Instance(object):
         time.sleep(60)
 
         self.instance.add_tag("Name", self.tag)
+        
+        self.check_instance_ready()
 
         
     def create_hard_disk(self):
@@ -124,3 +127,18 @@ class Instance(object):
         bdm['/dev/sda1'] = dev_sda1
 
         return bdm
+        
+    def check_instance_ready(self):
+
+        s = socket.socket()
+        port = 22  # port number is a number, not string
+
+        for i in range(1, 1000):
+            try:
+                s.connect((self.instance.ip_address, port)) 
+                print 'Machine is taking ssh connections!'
+                break
+                
+            except Exception as e: 
+                print("something's wrong with %s:%d. Exception is %s" % (address, port, e))
+                time.sleep(10)

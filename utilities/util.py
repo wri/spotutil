@@ -16,4 +16,4 @@ def launch_putty(ip_address):
     
     cmd = ['putty', host_name, '-ssh', '-i', ppk_file]
     
-    subprocess.check_call(cmd)
+    subprocess.Popen(cmd)

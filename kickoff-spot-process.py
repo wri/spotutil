@@ -10,7 +10,7 @@ def main():
     parser = argparse.ArgumentParser(description='Start spot instance and run multiprocessing jobs')
     
     # Args related to the machine we'll be starting
-    parser.add_argument('--ami-id', '-a', default='ami-40275656', help="ID of the AMI you want to launch")
+    parser.add_argument('--ami-id', '-a', default='ami-85554efe', help="ID of the AMI you want to launch")
     parser.add_argument('--instance-type', '-i', required=True, help='spot instance type')
     parser.add_argument('--price', default='3.00', help='price for each instance')
     parser.add_argument('--disk-size', '-d', default=50, help='disk size in GB')
