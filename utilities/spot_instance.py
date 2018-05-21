@@ -37,21 +37,6 @@ class Instance(object):
 
         self.wait_for_instance()
         
-    def run(self, local_file_path, proc_type):
-
-        if local_file_path:
-
-            utilities_dir = os.path.join(self.root_dir, 'utilities')
-            full_local_path = os.path.realpath(local_file_path)
-            print "this is the full local path: {}".format(full_local_path)
-            fab_cmd = 'start_process:{},{}'.format(full_local_path, proc_type)
-
-            host_name = 'ubuntu@{0}'.format(self.instance.ip_address)
-            print "host address is: {}".format(host_name)
-
-            cmd = ['fab', fab_cmd, '-i', self.pem_file, '-H', host_name]
-            subprocess.check_call(cmd, cwd=utilities_dir)
-
     def get_pem(self):
         self.pem_file = os.path.join(self.root_dir, 'tokens', 'chofmann-wri.pem')
         
@@ -63,10 +48,10 @@ class Instance(object):
         print 'requesting spot instance'
 
         bdm = self.create_hard_disk()
+        ip = self.create_ip()
 
         config = {'key_name': 'chofmann-wri',
-                  'subnet_id': 'subnet-c9679abe',
-                  'security_group_ids': ['sg-827f1bfa'],
+                  'network_interfaces': ip,
                   'dry_run': False,
                   'instance_type': self.instance_type,
                   'block_device_map': bdm}
@@ -127,6 +112,18 @@ class Instance(object):
         bdm['/dev/sda1'] = dev_sda1
 
         return bdm
+
+    def create_ip(self):
+
+        subnet_id = 'subnet-116d9a4a'
+        security_group_ids = ['sg-3e719042', 'sg-d7a0d8ad', 'sg-6c6a5911']
+
+        interface = boto.ec2.networkinterface.NetworkInterfaceSpecification(subnet_id=subnet_id,
+                                                                    groups=security_group_ids,
+                                                                    associate_public_ip_address=True)
+        interfaces = boto.ec2.networkinterface.NetworkInterfaceCollection(interface)
+
+        return interfaces
         
     def check_instance_ready(self):
 
