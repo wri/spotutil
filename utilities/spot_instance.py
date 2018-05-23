@@ -5,8 +5,7 @@ import time
 import subprocess
 from retrying import retry
 
-# check if fabric is installed
-from fabric.api import env
+from utilities import util
 
 ec2_conn = boto.ec2.connect_to_region('us-east-1')
 
@@ -25,6 +24,7 @@ class Instance(object):
 
         self.spot_request = None
         self.instance = None
+        self.ssh_ip = None
         self.pem_file = None
         
         print 'Creating a instance type {} from {}'.format(self.instance_type, self.ami_id)
@@ -93,6 +93,15 @@ class Instance(object):
             print 'Instance {} is {}'.format(self.instance.id, status)
             
         print 'Server IP is {}'.format(self.instance.ip_address)
+        print 'Private IP is {}'.format(self.instance.private_ip_address)
+
+        if not self.ssh_ip:
+            if util.in_office():
+                self.ssh_ip = self.instance.ip_address
+            else:
+                print "Based on your IP, it appears that you're out of the office \n" \
+                      "Make sure to connect to the VPN and then ssh/putty using the private IP!"
+                self.ssh_ip = self.instance.private_ip_address
 
         print 'Sleeping for 60 seconds to make sure server is ready'
         time.sleep(60)
@@ -132,7 +141,7 @@ class Instance(object):
 
         for i in range(1, 1000):
             try:
-                s.connect((self.instance.ip_address, port)) 
+                s.connect((self.ssh_ip, port)) 
                 print 'Machine is taking ssh connections!'
                 break
                 
