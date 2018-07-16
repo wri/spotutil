@@ -32,7 +32,6 @@ def in_office():
     r = requests.get('https://api.ipify.org')
     ip = r.text
 
-
     if ip == '216.70.220.184':
         in_office = True
 

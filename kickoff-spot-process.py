@@ -4,6 +4,7 @@ import argparse
 from utilities.spot_instance import Instance
 from utilities import util
 
+
 def main():
 
     # Parse commandline arguments
@@ -15,8 +16,6 @@ def main():
     parser.add_argument('--price', default='3.00', help='price for each instance')
     parser.add_argument('--disk-size', '-d', default=500, help='disk size in GB')
     parser.add_argument('--tag', '-t', default='TEMP-TSV-SPOT', help='tag used to ID your instance')
-    parser.add_argument('--putty', dest='putty', action='store_true')
-    parser.set_defaults(putty=False)
 
     args = parser.parse_args()
 

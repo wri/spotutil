@@ -25,24 +25,14 @@ class Instance(object):
         self.spot_request = None
         self.instance = None
         self.ssh_ip = None
-        self.pem_file = None
         
         print 'Creating a instance type {} from {}'.format(self.instance_type, self.ami_id)
 
     def start(self):
 
-        self.get_pem()
-
         self.make_request()
 
         self.wait_for_instance()
-        
-    def get_pem(self):
-        self.pem_file = os.path.join(self.root_dir, 'tokens', 'chofmann-wri.pem')
-        
-        if not os.path.exists(self.pem_file):
-            raise ValueError('Could not find token {}'.format(self.pem_file))
-
 
     def make_request(self):
         print 'requesting spot instance'
@@ -109,7 +99,6 @@ class Instance(object):
         self.instance.add_tag("Name", self.tag)
         
         self.check_instance_ready()
-
         
     def create_hard_disk(self):
 
