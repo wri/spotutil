@@ -1,1 +1,0 @@
-name = 'gfw-create-spot-worker'

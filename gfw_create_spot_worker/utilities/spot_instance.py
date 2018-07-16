@@ -4,19 +4,13 @@ import socket
 import time
 from retrying import retry
 
-from utilities import util
+import util
 
 ec2_conn = boto.ec2.connect_to_region('us-east-1')
 
 
 class Instance(object):
-    def __init__(self, args):
-
-        self.instance_type = args.instance_type
-        self.ami_id = args.ami_id
-        self.price = args.price
-        self.disk_size = args.disk_size
-        self.tag = args.tag
+    def __init__(self, instance_type, price, disk_size, ami_id):
 
         cwd = os.path.dirname(os.path.realpath(__file__))
         self.root_dir = os.path.dirname(cwd)
@@ -24,8 +18,13 @@ class Instance(object):
         self.spot_request = None
         self.instance = None
         self.ssh_ip = None
-        
-        print 'Creating a instance type {} from {}'.format(self.instance_type, self.ami_id)
+
+        self.instance_type = instance_type
+        self.disk_size = disk_size
+        self.price = price
+        self.ami_id = ami_id
+
+        print 'Creating a instance type {}'.format(self.instance_type)
 
     def start(self):
 

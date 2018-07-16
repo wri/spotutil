@@ -1,4 +1,4 @@
-# gfw-create-spot-worker
+# gfw_create_spot_worker
 CLI tool to create a spot worker on AWS and launch processes
 
 Used by GFW staff to create / manage spot instances. Default instance ID is updated frequently to point at our preferred analysis AMI, which includes GDAL, gmt, and other common OSGEO packages.
