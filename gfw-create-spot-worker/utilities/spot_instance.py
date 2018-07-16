@@ -2,7 +2,6 @@ import os
 import boto.ec2
 import socket
 import time
-import subprocess
 from retrying import retry
 
 from utilities import util
