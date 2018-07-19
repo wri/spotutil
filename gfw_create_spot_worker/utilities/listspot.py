@@ -11,27 +11,35 @@ def listspot():
     client = boto3.client('ec2')
     table = PrettyTable(['User', 'Instance Type', 'Internal IP', 'External IP'])
     spot_info_list = []
-    for r in spot_request:
-        spot_dict = {}
-        state = r.state
-        if state == 'active':
 
-            instance_id = r.instance_id
-            response = client.describe_instances(InstanceIds=[instance_id])
+    if spot_request:
+        for r in spot_request:
+            spot_dict = {}
+            state = r.state
+            if state == 'active':
 
-            internal_ip = response['Reservations'][0]['Instances'][0]['PrivateIpAddress']
-            external_ip = response['Reservations'][0]['Instances'][0]['PublicIpAddress']
+                instance_id = r.instance_id
+                response = client.describe_instances(InstanceIds=[instance_id])
 
-            instance_type = ec2_conn.get_instance_attribute(instance_id, 'instanceType')['instanceType']
-            user = r.tags['User']
+                internal_ip = response['Reservations'][0]['Instances'][0]['PrivateIpAddress']
+                external_ip = response['Reservations'][0]['Instances'][0]['PublicIpAddress']
 
-            table.add_row([user, instance_type, internal_ip, external_ip])
+                instance_type = ec2_conn.get_instance_attribute(instance_id, 'instanceType')['instanceType']
+                try:
+                    user = r.tags['User']
+                except KeyError:
+                    user = 'Unknown'
 
-            spot_dict['instance_id'] = instance_id
-            spot_dict['internal_ip'] = internal_ip
-            spot_dict['external_ip'] = external_ip
-            spot_dict['user'] = user
-            spot_dict['id'] = r.id
-            spot_info_list.append(spot_dict)
+                table.add_row([user, instance_type, internal_ip, external_ip])
 
-    return table, spot_info_list
+                spot_dict['instance_id'] = instance_id
+                spot_dict['internal_ip'] = internal_ip
+                spot_dict['external_ip'] = external_ip
+                spot_dict['user'] = user
+                spot_dict['id'] = r.id
+                spot_info_list.append(spot_dict)
+
+        return table, spot_info_list
+
+    else:
+        print "No active Spot requests found."

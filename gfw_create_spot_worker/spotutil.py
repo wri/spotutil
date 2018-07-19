@@ -14,7 +14,6 @@ def spotutil():
 @click.option('--disk_size', default=500)
 @click.option('--ami-id', default='ami-57990128')
 def new_spot(instance_type, price, disk_size, ami_id):
-    click.echo('Created new spot of type %s' % instance_type)
     newspot.newspot(instance_type, price, disk_size, ami_id)
 
 
@@ -26,10 +25,9 @@ def list_spots():
 
 
 @spotutil.command('rm')
-@click.option('--username')
-@click.option('--instance_id')
-@click.option('--internal_ip')
-@click.option('--external_ip')
-def remove_spot(instance_id, internal_ip, external_ip, username):
-    removespot.removespot(username, internal_ip, external_ip, instance_id)
+@click.option('--username', help='The user printed when running `spotutil ls`')
+@click.option('--internal_ip', help='The internal IP')
+@click.option('--external_ip', help='The external IP')
+def remove_spot(username, internal_ip, external_ip):
+    removespot.removespot(username, internal_ip, external_ip)
 

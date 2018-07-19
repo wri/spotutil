@@ -133,5 +133,5 @@ class Instance(object):
                 break
                 
             except Exception as e: 
-                print("something's wrong with %s:%d. Exception is %s" % (address, port, e))
+                print("something's wrong with %s:%d. Exception is %s" % (self.ssh_ip, port, e))
                 time.sleep(10)
