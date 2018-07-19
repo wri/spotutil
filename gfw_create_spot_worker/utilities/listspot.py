@@ -2,6 +2,8 @@ import boto.ec2
 import boto3
 from prettytable import PrettyTable
 
+from util import launchtime
+
 
 def listspot():
 
@@ -9,7 +11,11 @@ def listspot():
     spot_request = ec2_conn.get_all_spot_instance_requests()
 
     client = boto3.client('ec2')
-    table = PrettyTable(['User', 'Instance Type', 'Internal IP', 'External IP'])
+    table_columns = ['User', 'Instance Type', 'Internal IP', 'External IP', 'Up Time']
+    table = PrettyTable(table_columns)
+    for c in table_columns:
+        table.align[c] = "l"
+
     spot_info_list = []
 
     if spot_request:
@@ -24,13 +30,15 @@ def listspot():
                 internal_ip = response['Reservations'][0]['Instances'][0]['PrivateIpAddress']
                 external_ip = response['Reservations'][0]['Instances'][0]['PublicIpAddress']
 
+                launch_info = launchtime(response, r)
+
                 instance_type = ec2_conn.get_instance_attribute(instance_id, 'instanceType')['instanceType']
                 try:
                     user = r.tags['User']
                 except KeyError:
                     user = 'Unknown'
 
-                table.add_row([user, instance_type, internal_ip, external_ip])
+                table.add_row([user, instance_type, internal_ip, external_ip, launch_info])
 
                 spot_dict['instance_id'] = instance_id
                 spot_dict['internal_ip'] = internal_ip
@@ -38,6 +46,7 @@ def listspot():
                 spot_dict['user'] = user
                 spot_dict['id'] = r.id
                 spot_info_list.append(spot_dict)
+
 
         return table, spot_info_list
 

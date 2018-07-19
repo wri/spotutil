@@ -18,6 +18,7 @@ class Instance(object):
         self.spot_request = None
         self.instance = None
         self.ssh_ip = None
+        self.user = None
 
         self.instance_type = instance_type
         self.disk_size = disk_size
@@ -60,11 +61,10 @@ class Instance(object):
                 
                 # windows
                 if os.name == 'nt':
-                    user = os.getenv('username')
+                    self.user = os.getenv('username')
                 else:
-                    user = os.getenv('USER')
-                    
-                self.spot_request.add_tag('User', user)
+                    self.user = os.getenv('USER')
+                self.spot_request.add_tag('User', self.user)
 
     @retry(wait_fixed=2000, stop_max_attempt_number=10)
     def wait_for_instance(self):
@@ -91,10 +91,11 @@ class Instance(object):
                       "Make sure to connect to the VPN and then ssh/putty using the private IP!"
                 self.ssh_ip = self.instance.private_ip_address
 
-        print 'Sleeping for 60 seconds to make sure server is ready'
-        time.sleep(60)
+        print 'Sleeping for 30 seconds to make sure server is ready'
+        time.sleep(30)
 
-        self.instance.add_tag("Name", self.tag)
+        instance_tag = 'TEMP-SPOT-{}'.format(self.user)
+        self.instance.add_tag("Name", instance_tag)  # change self.tag to TEMP-<usenrmae> SPOT
         
         self.check_instance_ready()
         

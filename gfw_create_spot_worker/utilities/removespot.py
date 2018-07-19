@@ -13,18 +13,22 @@ def removespot(username=None, internal_ip=None, external_ip=None):
     inputs = {'user': username, 'internal_ip': internal_ip, 'external_ip': external_ip}
 
     inputs = dict((k, v) for k, v in inputs.iteritems() if v is not None)
+
     spot_filter_key = inputs.keys()[0]
     spot_filter_val = inputs[spot_filter_key]
     found_match = None
+
     for request in spot_list:
 
         if request[spot_filter_key] == spot_filter_val:
             found_match = True
             print "canceling this spot request: {}".format(request)
 
-            instance_id = request['id']
+            instance_id = request['instance_id']
 
-            response = client.cancel_spot_instance_requests(SpotInstanceRequestIds=[instance_id])
+            client.terminate_instances(InstanceIds=[instance_id])
+
+            response = client.cancel_spot_instance_requests(SpotInstanceRequestIds=[request['id']])
             status = response[u'CancelledSpotInstanceRequests'][0]['State']
             print "Status of request to Cancel Spot: {}".format(status)
 
