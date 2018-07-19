@@ -1,5 +1,5 @@
 import click
-from gfw_create_spot_worker.utilities import listspot, removespot, newspot
+from utilities import listspot, removespot, newspot
 
 
 @click.group()

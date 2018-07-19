@@ -1,4 +1,4 @@
-from gfw_create_spot_worker.utilities import spot_instance
+from spotutil.utilities import spot_instance
 
 
 def newspot(instance_type, price, disk_size, ami_id):

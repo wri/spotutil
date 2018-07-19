@@ -1,4 +1,4 @@
-from gfw_create_spot_worker.utilities.listspot import listspot
+from spotutil.utilities.listspot import listspot
 import boto3
 
 
