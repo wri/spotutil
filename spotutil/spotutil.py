@@ -20,8 +20,7 @@ def new_spot(instance_type, price, disk_size, ami_id):
 @spotutil.command('ls')
 def list_spots():
     click.echo('Listing active Spots')
-    table, spot_info_list = listspot.listspot()
-    print table
+    listspot.listspot()
 
 
 @spotutil.command('rm')

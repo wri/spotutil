@@ -126,7 +126,6 @@ class Instance(object):
 
         s = socket.socket()
         port = 22  # port number is a number, not string
-
         for i in range(1, 1000):
             try:
                 s.connect((self.ssh_ip, port)) 

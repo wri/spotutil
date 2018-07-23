@@ -26,10 +26,14 @@ def listspot():
 
                 instance_id = r.instance_id
                 response = client.describe_instances(InstanceIds=[instance_id])
-
-                internal_ip = response['Reservations'][0]['Instances'][0]['PrivateIpAddress']
-                external_ip = response['Reservations'][0]['Instances'][0]['PublicIpAddress']
-
+                try:
+                    internal_ip = response['Reservations'][0]['Instances'][0]['PrivateIpAddress']
+                except:
+                    internal_ip = 'Unknown'
+                try:
+                    external_ip = response['Reservations'][0]['Instances'][0]['PublicIpAddress']
+                except:
+                    external_ip = 'Unknown'
                 launch_info = launchtime(response, r)
 
                 instance_type = ec2_conn.get_instance_attribute(instance_id, 'instanceType')['instanceType']
@@ -47,8 +51,9 @@ def listspot():
                 spot_dict['id'] = r.id
                 spot_info_list.append(spot_dict)
 
-
+        print table
         return table, spot_info_list
 
     else:
         print "No active Spot requests found."
+

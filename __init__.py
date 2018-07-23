@@ -1,1 +1,1 @@
-name = 'gfw_create_spot_worker'
+name = 'spotutil'
