@@ -12,7 +12,7 @@ def spotutil():
 @click.argument('instance_type')
 @click.option('--price', default=3)
 @click.option('--disk_size', default=500)
-@click.option('--ami-id', default='ami-57990128')
+@click.option('--ami-id', default='ami-0adbb075')
 def new_spot(instance_type, price, disk_size, ami_id):
     newspot.newspot(instance_type, price, disk_size, ami_id)
 
