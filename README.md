@@ -12,9 +12,11 @@ First time users: Try running
 If this works, you should be good to go. If this does not work, you'll need to install aws command line client. This will put your aws credentials somewhere accessible by the tool.
 
 Run
+
 `pip install awscli`
 
 When that completes, use your aws key and secret access key to establish aws credentials:
+
 `aws configure`
 
 Default region name: us-east-1
