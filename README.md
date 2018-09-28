@@ -23,10 +23,22 @@ Default region name: us-east-1
 
 Default output format: json
 
-```
-usage: kickoff-spot-process.py [-h] [--ami-id AMI_ID] --instance-type
-                               INSTANCE_TYPE [--price PRICE]
-                               [--disk-size DISK_SIZE] [--tag TAG] [--putty]
-                               [--prep-script PREP_SCRIPT]
-                               [--main-script MAIN_SCRIPT]
-```
+To set up the tool:
+
+`pip install git+http://github.com/wri/spotutil`
+
+Once setup is complete, the tool can be run from any directory.
+
+Options:
+
+Create a spot: `spotutil new m4.large`
+
+Instance types commonly used: m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge, m4.16xlarge
+
+Lists the active spots: `spotutil ls`
+
+Remove an active spot. Use either of these options: `spotutil rm [--username][--interal_ip][--external_ip]`
+
+Example: `spotutil rm --username sgibbes.local`
+
+
