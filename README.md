@@ -1,7 +1,7 @@
 # spotutil
 
 ## Introduction
-CLI tool to create a spot worker on AWS and launch processes
+CLI tool to create, kill and list spot workers on AWS
 
 Used by GFW staff to create / manage spot instances. Default instance ID is updated frequently to point at our preferred analysis AMI, which includes GDAL, gmt, and other common OSGEO packages.
 
@@ -10,11 +10,11 @@ Requires a `tokens` dir with .pem file to allow fab to enter the machine, in add
 
 
 ## Set-up
-First time users: Try running
+Try running
 
 `aws s3 ls s3://gfw2-data/`
 
-If this works, you should be good to go. If this does not work, you'll need to install aws command line client. This will put your aws credentials somewhere accessible by the tool.
+If this works, you should be good to go to continue to the **Install spotutil** section. If this does not work, you'll need to install aws command line client. This will put your aws credentials somewhere accessible by the tool.
 
 Run
 
@@ -35,7 +35,6 @@ Default output format: json
 Once setup is complete, the tool can be run from any directory.
 
 ## Using spotutil
-Options:
 
 **Create a spot** 
 
