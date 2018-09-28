@@ -20,6 +20,7 @@ When that completes, use your aws key and secret access key to establish aws cre
 `aws configure`
 
 Default region name: us-east-1
+
 Default output format: json
 
 ```
