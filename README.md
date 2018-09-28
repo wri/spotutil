@@ -1,10 +1,15 @@
-# gfw_create_spot_worker
+# spotutil
+
+## Introduction
 CLI tool to create a spot worker on AWS and launch processes
 
 Used by GFW staff to create / manage spot instances. Default instance ID is updated frequently to point at our preferred analysis AMI, which includes GDAL, gmt, and other common OSGEO packages.
 
+## Requirements
 Requires a `tokens` dir with .pem file to allow fab to enter the machine, in addition to proper AWS / EC2 permissions.
 
+
+## Set-up
 First time users: Try running
 
 `aws s3 ls s3://gfw2-data/`
@@ -23,21 +28,29 @@ Default region name: us-east-1
 
 Default output format: json
 
-To set up the tool:
+## Install spotutil
 
 `pip install git+http://github.com/wri/spotutil`
 
 Once setup is complete, the tool can be run from any directory.
 
+## Using spotutil
 Options:
 
-Create a spot: `spotutil new m4.large`
+**Create a spot** 
+
+`spotutil new m4.large`
 
 Instance types commonly used: m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge, m4.16xlarge
 
-Lists the active spots: `spotutil ls`
 
-Remove an active spot. Use either of these options: `spotutil rm [--username][--interal_ip][--external_ip]`
+**Lists the active spots** 
+
+`spotutil ls`
+
+**Remove an active spot**
+
+`spotutil rm [--username][--interal_ip][--external_ip]`
 
 Example: `spotutil rm --username sgibbes.local`
 
