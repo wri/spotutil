@@ -35,6 +35,8 @@ Now ssh / putty in using the public IP listed for your instance
 
 Install 'em!
 
+Also note that some of these packages may need enivronment variables. If that's the case, edit the ~/.bashrc file to include these. You can test by running `source .bashrc` to update your shell's environment variables, then run your commands as before.
+
 ### create the AMI
 
 1. go back to the EC2 console, and stop the instance you just created
