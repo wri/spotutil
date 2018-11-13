@@ -1,0 +1,7 @@
+click
+boto
+boto3
+prettytable
+urllib3=1.23
+pytz
+retrying
