@@ -1,7 +1,9 @@
 import os
-import boto.ec2
+import sys
 import socket
 import time
+
+import boto.ec2
 from retrying import retry
 
 import util
@@ -10,7 +12,7 @@ ec2_conn = boto.ec2.connect_to_region('us-east-1')
 
 
 class Instance(object):
-    def __init__(self, instance_type, price, disk_size, ami_id):
+    def __init__(self, instance_type, key_pair, price, disk_size, ami_id):
 
         cwd = os.path.dirname(os.path.realpath(__file__))
         self.root_dir = os.path.dirname(cwd)
@@ -21,6 +23,7 @@ class Instance(object):
         self.user = None
 
         self.instance_type = instance_type
+        self.key_pair = key_pair
         self.disk_size = disk_size
         self.price = price
         self.ami_id = ami_id
@@ -39,13 +42,18 @@ class Instance(object):
         bdm = self.create_hard_disk()
         ip = self.create_ip()
 
-        config = {'key_name': 'chofmann-wri',
+        config = {'key_name': self.key_pair,
                   'network_interfaces': ip,
                   'dry_run': False,
                   'instance_type': self.instance_type,
                   'block_device_map': bdm}
 
-        self.spot_request = ec2_conn.request_spot_instances(self.price, self.ami_id, **config)[0]
+        try:
+            self.spot_request = ec2_conn.request_spot_instances(self.price, self.ami_id, **config)[0]
+        except boto.exception.EC2ResponseError:
+            print 'Key pair {} is not registered with AWS. Please double check the key pair passed, ' \
+                             'and if necessary create a new key'.format(self.key_pair)
+            sys.exit(1)
 
         running = False
 
