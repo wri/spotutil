@@ -50,12 +50,13 @@ class Instance(object):
                   'network_interfaces': ip,
                   'dry_run': False,
                   'instance_type': self.instance_type,
-                  'block_device_map': bdm}
+                  'block_device_map': bdm,
+                  }
 
         try:
             self.spot_request = ec2_conn.request_spot_instances(self.price, self.ami_id, **config)[0]
         except boto.exception.EC2ResponseError:
-            print('Request failed. Please verify if instance type and key_pair are valid'.format(self.key_pair))
+            print('Request failed. Please verify if input parameters are valid'.format(self.key_pair))
             sys.exit(1)
 
         running = False
@@ -76,6 +77,8 @@ class Instance(object):
                 else:
                     self.user = os.getenv('USER')
                 self.spot_request.add_tag('User', self.user)
+                self.spot_request.add_tag('Project', "Global Forest Watch")
+                self.spot_request.add_tag('Job', "Spotutil")
 
     @retry(wait_fixed=2000, stop_max_attempt_number=10)
     def wait_for_instance(self):
@@ -107,7 +110,11 @@ class Instance(object):
 
         instance_tag = 'TEMP-SPOT-{}'.format(self.user)
         self.instance.add_tag("Name", instance_tag)  # change self.tag to TEMP-<usenrmae> SPOT
-        
+        self.instance.add_tag("Project", "Global Forest Watch")
+        self.instance.add_tag("Pricing", "Spot")
+        self.instance.add_tag("Job", "Spotutil")
+        self.instance.add_tag("User", self.user)
+
         self.check_instance_ready()
         
     def create_hard_disk(self):
