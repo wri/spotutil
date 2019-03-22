@@ -13,7 +13,7 @@ setup(
     long_description_content_type="text/markdown",
     url="https://github.com/wri/spotutil",
     packages=["spotutil"],
-    install_requires=["click", "boto", "boto3", "prettytable", "urllib3=1.23", "pytz", "retrying", "requests"],
+    install_requires=["click", "boto", "boto3", "prettytable", "urllib3==1.23", "pytz", "retrying", "requests"],
     classifiers=(
         "Programming Language :: Python :: 2.7",
         "Programming Language :: Python :: 3",

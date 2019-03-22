@@ -55,8 +55,7 @@ class Instance(object):
         try:
             self.spot_request = ec2_conn.request_spot_instances(self.price, self.ami_id, **config)[0]
         except boto.exception.EC2ResponseError:
-            print('Key pair {} is not registered with AWS. Please double check the key pair passed, ' \
-                             'and if necessary create a new key'.format(self.key_pair))
+            print('Request failed. Please verify if instance type and key_pair are valid'.format(self.key_pair))
             sys.exit(1)
 
         running = False
