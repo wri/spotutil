@@ -5,16 +5,18 @@ with open("README.md", "r") as fh:
 
 setup(
     name="spotutil",
-    version="0.0.1",
-    author="Charlie Hofmann",
-    author_email="chofmann@wri.org",
+    version="0.0.2",
+    author="Charlie Hofmann, Thomas Maschler",
+    author_email="thomas.maschler@wri.org",
     description="Create an AWS Spot request. View active Spot instances",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/wri/spotutil",
-    packages=setuptools.find_packages(),
+    packages=["spotutil"],
+    install_requires=["click", "boto", "boto3", "prettytable", "urllib3==1.23", "pytz", "retrying", "requests"],
     classifiers=(
         "Programming Language :: Python :: 2.7",
+        "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ),

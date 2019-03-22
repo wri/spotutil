@@ -1,8 +1,10 @@
+from __future__ import print_function
+from __future__ import absolute_import
 import boto.ec2
 import boto3
 from prettytable import PrettyTable
 
-from util import launchtime
+from .util import launchtime
 
 
 def listspot():
@@ -51,9 +53,9 @@ def listspot():
                 spot_dict['id'] = r.id
                 spot_info_list.append(spot_dict)
 
-        print table
+        print(table)
         return table, spot_info_list
 
     else:
-        print "No active Spot requests found."
+        print("No active Spot requests found.")
 
