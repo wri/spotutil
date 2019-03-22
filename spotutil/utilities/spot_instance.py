@@ -1,3 +1,7 @@
+from __future__ import print_function
+from __future__ import absolute_import
+from builtins import range
+from builtins import object
 import os
 import sys
 import socket
@@ -6,7 +10,7 @@ import time
 import boto.ec2
 from retrying import retry
 
-import util
+from . import util
 
 ec2_conn = boto.ec2.connect_to_region('us-east-1')
 
@@ -28,7 +32,7 @@ class Instance(object):
         self.price = price
         self.ami_id = ami_id
 
-        print 'Creating a instance type {}'.format(self.instance_type)
+        print('Creating a instance type {}'.format(self.instance_type))
 
     def start(self):
 
@@ -37,7 +41,7 @@ class Instance(object):
         self.wait_for_instance()
 
     def make_request(self):
-        print 'requesting spot instance'
+        print('requesting spot instance')
 
         bdm = self.create_hard_disk()
         ip = self.create_ip()
@@ -51,8 +55,8 @@ class Instance(object):
         try:
             self.spot_request = ec2_conn.request_spot_instances(self.price, self.ami_id, **config)[0]
         except boto.exception.EC2ResponseError:
-            print 'Key pair {} is not registered with AWS. Please double check the key pair passed, ' \
-                             'and if necessary create a new key'.format(self.key_pair)
+            print('Key pair {} is not registered with AWS. Please double check the key pair passed, ' \
+                             'and if necessary create a new key'.format(self.key_pair))
             sys.exit(1)
 
         running = False
@@ -61,8 +65,8 @@ class Instance(object):
             time.sleep(5)
             self.spot_request = ec2_conn.get_all_spot_instance_requests(self.spot_request.id)[0]
             state = self.spot_request.state
-            print 'Spot id {} says: {}'.format(self.spot_request.id, self.spot_request.status.code,
-                                               self.spot_request.status.message)
+            print('Spot id {} says: {}'.format(self.spot_request.id, self.spot_request.status.code,
+                                               self.spot_request.status.message))
 
             if state == 'active':
                 running = True
@@ -77,7 +81,7 @@ class Instance(object):
     @retry(wait_fixed=2000, stop_max_attempt_number=10)
     def wait_for_instance(self):
 
-        print 'Instance ID is {}'.format(self.spot_request.instance_id)
+        print('Instance ID is {}'.format(self.spot_request.instance_id))
         reservations = ec2_conn.get_all_reservations(instance_ids=[self.spot_request.instance_id])
         self.instance = reservations[0].instances[0]
 
@@ -86,20 +90,20 @@ class Instance(object):
         while status == 'pending':
             time.sleep(5)
             status = self.instance.update()
-            print 'Instance {} is {}'.format(self.instance.id, status)
+            print('Instance {} is {}'.format(self.instance.id, status))
             
-        print 'Server IP is {}'.format(self.instance.ip_address)
-        print 'Private IP is {}'.format(self.instance.private_ip_address)
+        print('Server IP is {}'.format(self.instance.ip_address))
+        print('Private IP is {}'.format(self.instance.private_ip_address))
 
         if not self.ssh_ip:
             if util.in_office():
                 self.ssh_ip = self.instance.ip_address
             else:
-                print "Based on your IP, it appears that you're out of the office \n" \
-                      "Make sure to connect to the VPN and then ssh/putty using the private IP!"
+                print("Based on your IP, it appears that you're out of the office \n" \
+                      "Make sure to connect to the VPN and then ssh/putty using the private IP!")
                 self.ssh_ip = self.instance.private_ip_address
 
-        print 'Sleeping for 30 seconds to make sure server is ready'
+        print('Sleeping for 30 seconds to make sure server is ready')
         time.sleep(30)
 
         instance_tag = 'TEMP-SPOT-{}'.format(self.user)
@@ -137,7 +141,7 @@ class Instance(object):
         for i in range(1, 1000):
             try:
                 s.connect((self.ssh_ip, port)) 
-                print 'Machine is taking ssh connections!'
+                print('Machine is taking ssh connections!')
                 break
                 
             except Exception as e: 
