@@ -28,9 +28,10 @@ class Instance(object):
         self.subnet_id = None
         self.current_price = None
         self.zone = None
-        self.config = None
         self.request_id = None
         self.state = None
+
+        self.config = dict()
 
         self.instance_type = instance_type
         self.key_pair = key_pair
@@ -239,7 +240,6 @@ class Instance(object):
         Configure instance request
         """
         self.config = {
-            "SpotPrice": str(self.price),
             "Type": self.request_type,
             "DryRun": False,
             "LaunchSpecification": {
@@ -254,16 +254,21 @@ class Instance(object):
                         "Groups": self.security_group_ids,
                     }
                 ],
-                "BlockDeviceMappings": [
-                    {
-                        "DeviceName": "/dev/sdf",
-                        "Ebs": {
-                            "DeleteOnTermination": True,
-                            "VolumeSize": self.disk_size,
-                            "VolumeType": self.volume_type,
-                            "Encrypted": False,
-                        },
-                    }
-                ],
             },
         }
+
+        if self.price:
+            self.config["SpotPrice"] = str(self.price)
+
+        if self.disk_size:
+            self.config["LaunchSpecification"]["BlockDeviceMappings"] = [
+                {
+                    "DeviceName": "/dev/sdf",
+                    "Ebs": {
+                        "DeleteOnTermination": True,
+                        "VolumeSize": self.disk_size,
+                        "VolumeType": self.volume_type,
+                        "Encrypted": False,
+                    },
+                }
+            ]

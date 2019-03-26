@@ -12,7 +12,7 @@ def spotutil():
 @spotutil.command("new")
 @click.argument("instance_type")
 @click.argument("key_pair")
-@click.option("--price", default=3)
+@click.option("--price", default=0)
 @click.option("--disk_size", default=500)
 @click.option(
     "--ami-id", default="ami-017dc21b2db099158"
