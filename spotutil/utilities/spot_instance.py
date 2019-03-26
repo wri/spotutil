@@ -3,16 +3,14 @@ from __future__ import absolute_import
 from builtins import range
 from builtins import object
 from botocore.exceptions import ClientError
+from . import util
+
+# from retrying import retry
 import os
 import sys
 import socket
 import time
-
 import boto3
-
-# from retrying import retry
-
-from . import util
 
 ec2_conn = boto3.client("ec2", region_name="us-east-1")
 
@@ -74,6 +72,11 @@ class Instance(object):
         self._wait_for_instance()
 
     def _make_request(self):
+        """
+        Request a spot instance. Make sure that requests doesn't fail.
+        If it does fail, exit.
+        """
+
         print("requesting spot instance")
         self._configure_instance()
 
@@ -108,6 +111,10 @@ class Instance(object):
 
     # @retry(wait_fixed=2000, stop_max_attempt_number=10)
     def _wait_for_instance(self):
+        """
+        Add tags to instance for accounting.
+        Wait for instance to boot and make sure user can connect to it via SSH.
+        """
 
         print("Instance ID is {}".format(self.spot_request["InstanceId"]))
 
@@ -128,6 +135,9 @@ class Instance(object):
         self._check_instance_ready()
 
     def _update_request_state(self):
+        """
+        Check state of request and update self.state
+        """
         time.sleep(5)
         self.spot_request = ec2_conn.describe_spot_instance_requests(
             SpotInstanceRequestIds=[self.request_id]
@@ -142,6 +152,10 @@ class Instance(object):
         )
 
     def _tag_request(self):
+        """
+        Add tags to spot request
+        """
+
         tags = [
             {"Key": "User", "Value": self.user},
             {"Key": "Project", "Value": self.project},
@@ -150,6 +164,9 @@ class Instance(object):
         ec2_conn.create_tags(Resources=[self.request_id], Tags=tags)
 
     def _tag_instance(self):
+        """
+        Add tags to instance for internal accounting
+        """
         tags = [
             {"Key": "User", "Value": self.user},
             {"Key": "Project", "Value": self.project},
@@ -159,6 +176,10 @@ class Instance(object):
         self.instance.create_tags(DryRun=False, Tags=tags)
 
     def _instance_ips(self):
+        """
+        Print out instance public and private IP
+        Set SSH IP based on user location (In WRI office or not)
+        """
         print("Server IP is {}".format(self.instance.public_ip_address))
         print("Private IP is {}".format(self.instance.private_ip_address))
 
@@ -173,6 +194,9 @@ class Instance(object):
                 self.ssh_ip = self.instance.private_ip_address
 
     def _check_instance_ready(self):
+        """
+        Try to SSH into instance to make sure machine is up and accepts connections
+        """
 
         s = socket.socket()
         port = 22  # port number is a number, not string
@@ -190,6 +214,9 @@ class Instance(object):
                 time.sleep(10)
 
     def _get_best_price(self):
+        """
+        Check for current prices and select subnet in zone with lowest price
+        """
 
         price_history = ec2_conn.describe_spot_price_history(
             InstanceTypes=[self.instance_type],
@@ -208,6 +235,9 @@ class Instance(object):
         self.current_price = best_price[1]
 
     def _configure_instance(self):
+        """
+        Configure instance request
+        """
         self.config = {
             "SpotPrice": str(self.price),
             "Type": self.request_type,

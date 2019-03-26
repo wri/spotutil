@@ -6,10 +6,11 @@ from spotutil.utilities.util import launchtime
 
 
 def listspot():
-
-    ec2_conn = boto3.client("ec2", region_name="us-east-1")
-    filters = {"Filters": [{"Name": "state", "Values": ["active"]}]}
-    spot_request = ec2_conn.describe_spot_instance_requests(**filters)
+    """
+    List running instances in a table
+    :return: Table , List of running instances
+    """
+    spot_instances = _get_running_instances()
 
     table_columns = ["User", "Instance Type", "Internal IP", "External IP", "Up Time"]
     table = PrettyTable(table_columns)
@@ -17,39 +18,56 @@ def listspot():
     for c in table_columns:
         table.align[c] = "l"
 
-    spot_info_list = []
-
-    if spot_request:
-        for r in spot_request["SpotInstanceRequests"]:
-            spot_dict = {}
-            instance_id = r["InstanceId"]
-            request_id = r["SpotInstanceRequestId"]
-
-            ec2 = boto3.resource("ec2")
-            instance = ec2.Instance(instance_id)
-
-            launch_info = launchtime(instance.launch_time)
-            instance_type = instance.instance_type
-            internal_ip = instance.private_ip_address
-            external_ip = instance.public_ip_address
-            tags = instance.tags
-
-            try:
-                user = [t["Value"] for t in tags if t["Key"] == "User"][0]
-            except (KeyError, IndexError, TypeError):
-                user = "Unknown"
-
-            table.add_row([user, instance_type, internal_ip, external_ip, launch_info])
-
-            spot_dict["instance_id"] = instance_id
-            spot_dict["internal_ip"] = internal_ip
-            spot_dict["external_ip"] = external_ip
-            spot_dict["user"] = user
-            spot_dict["id"] = request_id
-            spot_info_list.append(spot_dict)
+    if len(spot_instances):
+        for spot in spot_instances:
+            table.add_row(
+                [
+                    spot["user"],
+                    spot["instance_type"],
+                    spot["internal_ip"],
+                    spot["external_ip"],
+                    spot["launch_info"],
+                ]
+            )
 
         print(table)
-        return table, spot_info_list
+        return table, spot_instances
 
     else:
         print("No active Spot requests found.")
+
+
+def _get_running_instances():
+    """
+    Get details of running instances
+    :return: List of running instances
+    """
+
+    ec2_conn = boto3.client("ec2", region_name="us-east-1")
+    filters = {"Filters": [{"Name": "state", "Values": ["active"]}]}
+    spot_request = ec2_conn.describe_spot_instance_requests(**filters)
+    spot_instances = list()
+
+    if spot_request:
+        for r in spot_request["SpotInstanceRequests"]:
+
+            spot_dict = dict()
+            ec2 = boto3.resource("ec2")
+
+            instance = ec2.Instance(r["InstanceId"])
+            spot_dict["instance_id"] = r["InstanceId"]
+            spot_dict["id"] = r["SpotInstanceRequestId"]
+            spot_dict["launch_info"] = launchtime(instance.launch_time)
+            spot_dict["instance_type"] = instance.instance_type
+            spot_dict["internal_ip"] = instance.private_ip_address
+            spot_dict["external_ip"] = instance.public_ip_address
+
+            tags = instance.tags
+
+            try:
+                spot_dict["user"] = [t["Value"] for t in tags if t["Key"] == "User"][0]
+            except (KeyError, IndexError, TypeError):
+                spot_dict["user"] = "Unknown"
+
+            spot_instances.append(spot_dict)
+    return spot_instances
