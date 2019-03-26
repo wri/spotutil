@@ -36,7 +36,7 @@ Once setup is complete, the tool can be run from any directory.
 
 ## Using spotutil
 
-**Create a spot** 
+**Create a spot**
 
 `spotutil new m4.large <key_pair>`
 
@@ -44,7 +44,7 @@ Instance types commonly used: m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10
 
 For `<key_pair>` use name for any key pair registered with your AWS account. Make sure you are in posession of the private key. You will need it to SSH into the machine
 
-**Lists the active spots** 
+**Lists the active spots**
 
 `spotutil ls`
 

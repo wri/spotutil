@@ -1,8 +1,9 @@
 click
-boto
 boto3
+botocore
 prettytable
 urllib3==1.23
 pytz
 retrying
 requests
+pre-commit
