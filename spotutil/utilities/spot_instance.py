@@ -9,7 +9,8 @@ import socket
 import time
 
 import boto3
-from retrying import retry
+
+# from retrying import retry
 
 from . import util
 
@@ -141,10 +142,12 @@ class Instance(object):
         )
 
     def _tag_request(self):
-        ec2 = boto3.resource("ec2")
-        ec2.Tag(self.request_id, "User", self.user)
-        ec2.Tag(self.request_id, "Project", self.project)
-        ec2.Tag(self.request_id, "Job", self.job)
+        tags = [
+            {"Key": "User", "Value": self.user},
+            {"Key": "Project", "Value": self.project},
+            {"Key": "Job", "Value": self.job},
+        ]
+        ec2_conn.create_tags(Resources=[self.request_id], Tags=tags)
 
     def _tag_instance(self):
         tags = [
