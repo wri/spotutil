@@ -14,11 +14,12 @@ def spotutil():
 @click.argument("key_pair")
 @click.option("--price", default=0)
 @click.option("--disk_size", default=500)
+@click.option("--user_data", default=None)
 @click.option(
     "--ami-id", default="ami-017dc21b2db099158"
 )  # AMI for GDAL-PROCESSOR-20181109
-def new_spot(instance_type, key_pair, price, disk_size, ami_id):
-    newspot.newspot(instance_type, key_pair, price, disk_size, ami_id)
+def new_spot(instance_type, key_pair, price, disk_size, ami_id, user_data):
+    newspot.newspot(instance_type, key_pair, price, disk_size, ami_id, user_data)
 
 
 @spotutil.command("ls")

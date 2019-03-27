@@ -16,7 +16,7 @@ ec2_conn = boto3.client("ec2", region_name="us-east-1")
 
 
 class Instance(object):
-    def __init__(self, instance_type, key_pair, price, disk_size, ami_id):
+    def __init__(self, instance_type, key_pair, price, disk_size, ami_id, user_data):
 
         cwd = os.path.dirname(os.path.realpath(__file__))
         self.root_dir = os.path.dirname(cwd)
@@ -38,6 +38,7 @@ class Instance(object):
         self.disk_size = disk_size
         self.price = price
         self.ami_id = ami_id
+        self.user_data = user_data
 
         # windows
         if os.name == "nt":
@@ -272,3 +273,6 @@ class Instance(object):
                     },
                 }
             ]
+
+        if self.user_data:
+            self.config["LaunchSpecification"]["UserData"] = self.user_data
