@@ -1,6 +1,7 @@
 click
 boto
 boto3
+future
 prettytable
 urllib3==1.23
 pytz
