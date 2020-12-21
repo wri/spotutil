@@ -5,7 +5,7 @@ import boto3
 
 def removespot(username=None, internal_ip=None, external_ip=None):
 
-    client = boto3.client('ec2')
+    client = boto3.client('ec2', 'us-east-1')
 
     # get list of active spots
     table, spot_list = listspot()
