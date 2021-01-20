@@ -2,17 +2,17 @@ from __future__ import print_function
 from __future__ import absolute_import
 from builtins import range
 from builtins import object
+from botocore.exceptions import ClientError
+from . import util
+
+# from retrying import retry
 import os
 import sys
 import socket
 import time
+import boto3
 
-import boto.ec2
-from retrying import retry
-
-from . import util
-
-ec2_conn = boto.ec2.connect_to_region('us-east-1')
+ec2_conn = boto3.client("ec2", region_name="us-east-1")
 
 
 class Instance(object):
@@ -25,6 +25,13 @@ class Instance(object):
         self.instance = None
         self.ssh_ip = None
         self.user = None
+        self.subnet_id = None
+        self.current_price = None
+        self.zone = None
+        self.request_id = None
+        self.state = None
+
+        self.config = dict()
 
         self.instance_type = instance_type
         self.key_pair = key_pair
@@ -32,124 +39,236 @@ class Instance(object):
         self.price = price
         self.ami_id = ami_id
 
-        print('Creating a instance type {}'.format(self.instance_type))
+        # windows
+        if os.name == "nt":
+            self.user = os.getenv("username")
+        else:
+            self.user = os.getenv("USER")
+
+        self.project = "Global Forest Watch"
+        self.job = "Spotutil"
+        self.product_description = "Linux/UNIX (Amazon VPC)"
+        self.volume_type = "gp2"
+        self.request_type = "one-time"
+        self.security_group_ids = ["sg-3e719042", "sg-d7a0d8ad", "sg-6c6a5911"]
+        self.subnet_ids = {
+            "us-east-1a": "subnet-00335589f5f424283",
+            "us-east-1b": "subnet-8c2b5ea1",
+            "us-east-1c": "subnet-08458452c1d05713b",
+            "us-east-1d": "subnet-116d9a4a",
+            "us-east-1e": "subnet-037b97cff4493e3a1",
+            "us-east-1f": "subnet-037b97cff4493e3a1",
+        }
+
+        self._get_best_price()
+
+        print(
+            "Creating an instance type {} in zone {}. Current price: ${}".format(
+                self.instance_type, self.zone, self.current_price
+            )
+        )
 
     def start(self):
+        self._make_request()
+        self._wait_for_instance()
 
-        self.make_request()
+    def _make_request(self):
+        """
+        Request a spot instance. Make sure that requests doesn't fail.
+        If it does fail, exit.
+        """
 
-        self.wait_for_instance()
-
-    def make_request(self):
-        print('requesting spot instance')
-
-        bdm = self.create_hard_disk()
-        ip = self.create_ip()
-
-        config = {'key_name': self.key_pair,
-                  'network_interfaces': ip,
-                  'dry_run': False,
-                  'instance_type': self.instance_type,
-                  'block_device_map': bdm,
-                  }
+        print("requesting spot instance")
+        self._configure_instance()
 
         try:
-            self.spot_request = ec2_conn.request_spot_instances(self.price, self.ami_id, **config)[0]
-        except boto.exception.EC2ResponseError:
-            print('Request failed. Please verify if input parameters are valid'.format(self.key_pair))
+            self.spot_request = ec2_conn.request_spot_instances(**self.config)[
+                "SpotInstanceRequests"
+            ][0]
+        except ClientError as e:
+            print("Request failed. Please verify if input parameters are valid")
+            print(e.response)
             sys.exit(1)
 
+        self.request_id = self.spot_request["SpotInstanceRequestId"]
+
         running = False
-
         while not running:
-            time.sleep(5)
-            self.spot_request = ec2_conn.get_all_spot_instance_requests(self.spot_request.id)[0]
-            state = self.spot_request.state
-            print('Spot id {} says: {}'.format(self.spot_request.id, self.spot_request.status.code,
-                                               self.spot_request.status.message))
 
-            if state == 'active':
+            self._update_request_state()
+
+            if self.state == "active":
                 running = True
-                
-                # windows
-                if os.name == 'nt':
-                    self.user = os.getenv('username')
-                else:
-                    self.user = os.getenv('USER')
-                self.spot_request.add_tag('User', self.user)
-                self.spot_request.add_tag('Project', "Global Forest Watch")
-                self.spot_request.add_tag('Job', "Spotutil")
+                self._tag_request()
 
-    @retry(wait_fixed=2000, stop_max_attempt_number=10)
-    def wait_for_instance(self):
+            elif self.state == "failed":
+                print(
+                    "{} - {}".format(
+                        self.spot_request["Fault"]["Code"],
+                        self.spot_request["Fault"]["Message"],
+                    )
+                )
+                sys.exit(1)
 
-        print('Instance ID is {}'.format(self.spot_request.instance_id))
-        reservations = ec2_conn.get_all_reservations(instance_ids=[self.spot_request.instance_id])
-        self.instance = reservations[0].instances[0]
+    # @retry(wait_fixed=2000, stop_max_attempt_number=10)
+    def _wait_for_instance(self):
+        """
+        Add tags to instance for accounting.
+        Wait for instance to boot and make sure user can connect to it via SSH.
+        """
 
-        status = self.instance.update()
+        print("Instance ID is {}".format(self.spot_request["InstanceId"]))
 
-        while status == 'pending':
+        ec2 = boto3.resource("ec2")
+        self.instance = ec2.Instance(self.spot_request["InstanceId"])
+        self._tag_instance()
+
+        while self.instance.state == "pending":
             time.sleep(5)
-            status = self.instance.update()
-            print('Instance {} is {}'.format(self.instance.id, status))
-            
-        print('Server IP is {}'.format(self.instance.ip_address))
-        print('Private IP is {}'.format(self.instance.private_ip_address))
+            self.instance.reload()
+            print("Instance {} is {}".format(self.instance.id, self.instance.state))
+
+        self._instance_ips()
+
+        print("Sleeping for 30 seconds to make sure server is ready")
+        time.sleep(30)
+
+        self._check_instance_ready()
+
+    def _update_request_state(self):
+        """
+        Check state of request and update self.state
+        """
+        time.sleep(5)
+        self.spot_request = ec2_conn.describe_spot_instance_requests(
+            SpotInstanceRequestIds=[self.request_id]
+        )["SpotInstanceRequests"][0]
+        self.state = self.spot_request["State"]
+        print(
+            "Spot request {}. Status: {} - {}".format(
+                self.spot_request["State"],
+                self.spot_request["Status"]["Code"],
+                self.spot_request["Status"]["Message"],
+            )
+        )
+
+    def _tag_request(self):
+        """
+        Add tags to spot request
+        """
+
+        tags = [
+            {"Key": "User", "Value": self.user},
+            {"Key": "Project", "Value": self.project},
+            {"Key": "Job", "Value": self.job},
+        ]
+        ec2_conn.create_tags(Resources=[self.request_id], Tags=tags)
+
+    def _tag_instance(self):
+        """
+        Add tags to instance for internal accounting
+        """
+        tags = [
+            {"Key": "User", "Value": self.user},
+            {"Key": "Project", "Value": self.project},
+            {"Key": "Job", "Value": self.job},
+            {"Key": "Pricing", "Value": "Spot"},
+        ]
+        self.instance.create_tags(DryRun=False, Tags=tags)
+
+    def _instance_ips(self):
+        """
+        Print out instance public and private IP
+        Set SSH IP based on user location (In WRI office or not)
+        """
+        print("Server IP is {}".format(self.instance.public_ip_address))
+        print("Private IP is {}".format(self.instance.private_ip_address))
 
         if not self.ssh_ip:
             if util.in_office():
-                self.ssh_ip = self.instance.ip_address
+                self.ssh_ip = self.instance.public_ip_address
             else:
-                print("Based on your IP, it appears that you're out of the office \n" \
-                      "Make sure to connect to the VPN and then ssh/putty using the private IP!")
+                print(
+                    "Based on your IP, it appears that you're out of the office \n"
+                    "Make sure to connect to the VPN and then ssh/putty using the private IP!"
+                )
                 self.ssh_ip = self.instance.private_ip_address
 
-        print('Sleeping for 30 seconds to make sure server is ready')
-        time.sleep(30)
-
-        instance_tag = 'TEMP-SPOT-{}'.format(self.user)
-        self.instance.add_tag("Name", instance_tag)  # change self.tag to TEMP-<usenrmae> SPOT
-        self.instance.add_tag("Project", "Global Forest Watch")
-        self.instance.add_tag("Pricing", "Spot")
-        self.instance.add_tag("Job", "Spotutil")
-        self.instance.add_tag("User", self.user)
-
-        self.check_instance_ready()
-        
-    def create_hard_disk(self):
-
-        dev_sda1 = boto.ec2.blockdevicemapping.EBSBlockDeviceType()
-        dev_sda1.size = self.disk_size
-        dev_sda1.delete_on_termination = True
-
-        bdm = boto.ec2.blockdevicemapping.BlockDeviceMapping()
-        bdm['/dev/sda1'] = dev_sda1
-
-        return bdm
-
-    def create_ip(self):
-
-        subnet_id = 'subnet-116d9a4a'
-        security_group_ids = ['sg-3e719042', 'sg-d7a0d8ad', 'sg-6c6a5911']
-
-        interface = boto.ec2.networkinterface.NetworkInterfaceSpecification(subnet_id=subnet_id,
-                                                                    groups=security_group_ids,
-                                                                    associate_public_ip_address=True)
-        interfaces = boto.ec2.networkinterface.NetworkInterfaceCollection(interface)
-
-        return interfaces
-        
-    def check_instance_ready(self):
+    def _check_instance_ready(self):
+        """
+        Try to SSH into instance to make sure machine is up and accepts connections
+        """
 
         s = socket.socket()
         port = 22  # port number is a number, not string
         for i in range(1, 1000):
             try:
-                s.connect((self.ssh_ip, port)) 
-                print('Machine is taking ssh connections!')
+                s.connect((self.ssh_ip, port))
+                print("Machine is taking ssh connections!")
                 break
-                
-            except Exception as e: 
-                print("something's wrong with %s:%d. Exception is %s" % (self.ssh_ip, port, e))
+
+            except Exception as e:
+                print(
+                    "Something's wrong with %s:%d. Exception is %s"
+                    % (self.ssh_ip, port, e)
+                )
                 time.sleep(10)
+
+    def _get_best_price(self):
+        """
+        Check for current prices and select subnet in zone with lowest price
+        """
+
+        price_history = ec2_conn.describe_spot_price_history(
+            InstanceTypes=[self.instance_type],
+            MaxResults=len(self.subnet_ids.keys()),
+            ProductDescriptions=[self.product_description],
+        )
+
+        best_price = None
+
+        for p in price_history["SpotPriceHistory"]:
+            if not best_price or float(p["SpotPrice"]) < best_price[1]:
+                best_price = (p["AvailabilityZone"], float(p["SpotPrice"]))
+
+        self.zone = best_price[0]
+        self.subnet_id = self.subnet_ids[best_price[0]]
+        self.current_price = best_price[1]
+
+    def _configure_instance(self):
+        """
+        Configure instance request
+        """
+        self.config = {
+            "Type": self.request_type,
+            "DryRun": False,
+            "LaunchSpecification": {
+                "ImageId": self.ami_id,
+                "KeyName": self.key_pair,
+                "InstanceType": self.instance_type,
+                "NetworkInterfaces": [
+                    {
+                        "AssociatePublicIpAddress": True,
+                        "DeviceIndex": 0,
+                        "SubnetId": self.subnet_id,
+                        "Groups": self.security_group_ids,
+                    }
+                ],
+            },
+        }
+
+        if self.price:
+            self.config["SpotPrice"] = str(self.price)
+
+        if self.disk_size:
+            self.config["LaunchSpecification"]["BlockDeviceMappings"] = [
+                {
+                    "DeviceName": "/dev/sdf",
+                    "Ebs": {
+                        "DeleteOnTermination": True,
+                        "VolumeSize": self.disk_size,
+                        "VolumeType": self.volume_type,
+                        "Encrypted": False,
+                    },
+                }
+            ]

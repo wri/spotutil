@@ -28,7 +28,7 @@
 
 You should be redirected to the EC2 page of the AWS console. once there, click on your instance in the table and give it a temporary name.
 
-Now ssh / putty in using the public IP listed for your instance 
+Now ssh / putty in using the public IP listed for your instance
 
 
 ### Installing various software packages

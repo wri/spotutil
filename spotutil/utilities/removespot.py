@@ -11,7 +11,7 @@ def removespot(username=None, internal_ip=None, external_ip=None):
     table, spot_list = listspot()
 
     # turn inputs in a dict, can then find matching input
-    inputs = {'user': username, 'internal_ip': internal_ip, 'external_ip': external_ip}
+    inputs = {"user": username, "internal_ip": internal_ip, "external_ip": external_ip}
 
     inputs = dict((k, v) for k, v in inputs.items() if v is not None)
 
@@ -25,13 +25,20 @@ def removespot(username=None, internal_ip=None, external_ip=None):
             found_match = True
             print("canceling this spot request: {}".format(request))
 
-            instance_id = request['instance_id']
+            instance_id = request["instance_id"]
 
             client.terminate_instances(InstanceIds=[instance_id])
 
-            response = client.cancel_spot_instance_requests(SpotInstanceRequestIds=[request['id']])
-            status = response[u'CancelledSpotInstanceRequests'][0]['State']
+            response = client.cancel_spot_instance_requests(
+                SpotInstanceRequestIds=[request["id"]]
+            )
+
+            status = response[u"CancelledSpotInstanceRequests"][0]["State"]
             print("Status of request to Cancel Spot: {}".format(status))
 
     if not found_match:
-        print("WARNING: There are no active spot instances with {0} of {1}".format(spot_filter_key, spot_filter_val))
+        print(
+            "WARNING: There are no active spot instances with {0} of {1}".format(
+                spot_filter_key, spot_filter_val
+            )
+        )
