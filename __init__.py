@@ -1,1 +1,1 @@
-name = 'spotutil'
+name = "spotutil"
