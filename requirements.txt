@@ -1,5 +1,4 @@
 click
-boto
 boto3
 future
 prettytable
