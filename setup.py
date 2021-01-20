@@ -18,10 +18,11 @@ setup(
         "botocore",
         "boto3",
         "prettytable",
-        "urllib3<1.25,>=1.24.2",
+        "urllib3<1.27,>=1.25.5",
         "pytz",
         "retrying",
         "requests",
+        "future",
     ],
     classifiers=(
         "Programming Language :: Python :: 2.7",

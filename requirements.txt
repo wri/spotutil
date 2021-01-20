@@ -1,9 +1,8 @@
 click
 boto3
-botocore
+future
 prettytable
-urllib3==1.23
+urllib3<1.27,>=1.25.5
 pytz
 retrying
 requests
-pre-commit

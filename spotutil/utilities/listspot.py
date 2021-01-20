@@ -12,9 +12,12 @@ def listspot():
     """
     spot_instances = _get_running_instances()
 
-    table_columns = ["User", "Instance Type", "Internal IP", "External IP", "Up Time"]
-    table = PrettyTable(table_columns)
+    ec2_conn = boto.ec2.connect_to_region('us-east-1')
+    spot_request = ec2_conn.get_all_spot_instance_requests()
 
+    client = boto3.client('ec2', 'us-east-1')
+    table_columns = ['User', 'Instance Type', 'Internal IP', 'External IP', 'Up Time']
+    table = PrettyTable(table_columns)
     for c in table_columns:
         table.align[c] = "l"
 
