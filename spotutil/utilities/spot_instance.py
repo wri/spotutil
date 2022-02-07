@@ -16,7 +16,7 @@ ec2_conn = boto3.client("ec2", region_name="us-east-1")
 
 
 class Instance(object):
-    def __init__(self, instance_type, key_pair, price, disk_size, ami_id):
+    def __init__(self, instance_type, key_pair, price, disk_size, ami_id, flux_model):
 
         cwd = os.path.dirname(os.path.realpath(__file__))
         self.root_dir = os.path.dirname(cwd)
@@ -38,6 +38,7 @@ class Instance(object):
         self.disk_size = disk_size
         self.price = price
         self.ami_id = ami_id
+        self.flux_model = flux_model
 
         # windows
         if os.name == "nt":
@@ -58,6 +59,7 @@ class Instance(object):
             "us-east-1d": "subnet-116d9a4a",
             "us-east-1e": "subnet-037b97cff4493e3a1",
             "us-east-1f": "subnet-037b97cff4493e3a1",
+            # "us-east-1f": "subnet-037b97cff4493e3a1",  # Removed us-east-1f because it doesn't work with r5d machines
         }
 
         self._get_best_price()
@@ -209,7 +211,7 @@ class Instance(object):
 
             except Exception as e:
                 print(
-                    "Something's wrong with %s:%d. Exception is %s"
+                    "Something's wrong with %s:%d. Exception is: %s"
                     % (self.ssh_ip, port, e)
                 )
                 time.sleep(10)
@@ -219,6 +221,9 @@ class Instance(object):
         Check for current prices and select subnet in zone with lowest price
         """
 
+        # ec2 instance series (e.g., m4, r5d)
+        series = self.instance_type.split('.')[0]
+
         price_history = ec2_conn.describe_spot_price_history(
             InstanceTypes=[self.instance_type],
             MaxResults=len(self.subnet_ids.keys()),
@@ -227,7 +232,11 @@ class Instance(object):
 
         best_price = None
 
+        # Ignores region us-east-1f for r5d series because that series doesn't work in that region.
+        # All other series can consider any region for cheapest region.
         for p in price_history["SpotPriceHistory"]:
+            if series == "r5d" and p["AvailabilityZone"] == "us-east-1f":
+                continue
             if not best_price or float(p["SpotPrice"]) < best_price[1]:
                 best_price = (p["AvailabilityZone"], float(p["SpotPrice"]))
 
