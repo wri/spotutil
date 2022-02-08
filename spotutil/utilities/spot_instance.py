@@ -312,7 +312,7 @@ class Instance(object):
                 "LaunchTemplateConfigs": [
                     {
                         "LaunchTemplateSpecification": {
-                            "LaunchTemplateId": self.launch_template,
+                            "LaunchTemplateId": self.launch_template,   # This contains userdata to initialize machine
                             "Version": self.launch_template_version
                         },
                         "Overrides": [
@@ -362,21 +362,21 @@ class Instance(object):
                             "Groups": self.security_group_ids,
                         }
                     ],
+                    # Flux model spot machines mount SSD drives. Other series of machines use an EBS volume.
+                    "BlockDeviceMappings": [
+                        {
+                            "DeviceName": "/dev/sda1",
+                            "Ebs": {
+                                "DeleteOnTermination": True,
+                                "VolumeSize": self.disk_size,
+                                "VolumeType": self.volume_type,
+                                "Encrypted": False,
+                            },
+                        }
+                    ]
                 },
             }
 
         if self.price:
             self.config["SpotPrice"] = str(self.price)
 
-        if self.disk_size and not self.flux_model:
-            self.config["LaunchSpecification"]["BlockDeviceMappings"] = [
-                {
-                    "DeviceName": "/dev/sdf",
-                    "Ebs": {
-                        "DeleteOnTermination": True,
-                        "VolumeSize": self.disk_size,
-                        "VolumeType": self.volume_type,
-                        "Encrypted": False,
-                    },
-                }
-            ]
