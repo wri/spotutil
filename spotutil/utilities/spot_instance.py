@@ -101,6 +101,7 @@ class Instance(object):
                 time.sleep(15)
 
                 # Obtains information on instances in the spot fleet
+                # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.describe_spot_fleet_instances
                 self.spot_request = ec2_conn.describe_spot_fleet_instances(
                     SpotFleetRequestId=self.spot_fleet_request["SpotFleetRequestId"]
                 )
@@ -123,6 +124,7 @@ class Instance(object):
         # For non-flux model spot requests-- no spot fleet created, just a single instance
         else:
 
+            # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.request_spot_instances
             try:
                 self.spot_request = ec2_conn.request_spot_instances(**self.config)[
                     "SpotInstanceRequests"
@@ -132,8 +134,8 @@ class Instance(object):
                 print(e.response)
                 sys.exit(1)
 
-            print(self.spot_request)
-            print(self.spot_request["SpotInstanceRequestId"])
+            # print(self.spot_request)
+            # print(self.spot_request["SpotInstanceRequestId"])
 
             print("Waiting 15 seconds for request to be created before obtaining instance ID")
             time.sleep(15)
@@ -366,15 +368,15 @@ class Instance(object):
         if self.price:
             self.config["SpotPrice"] = str(self.price)
 
-        # if self.disk_size:
-        #     self.config["LaunchSpecification"]["BlockDeviceMappings"] = [
-        #         {
-        #             "DeviceName": "/dev/sdf",
-        #             "Ebs": {
-        #                 "DeleteOnTermination": True,
-        #                 "VolumeSize": self.disk_size,
-        #                 "VolumeType": self.volume_type,
-        #                 "Encrypted": False,
-        #             },
-        #         }
-        #     ]
+        if self.disk_size and not self.flux_model:
+            self.config["LaunchSpecification"]["BlockDeviceMappings"] = [
+                {
+                    "DeviceName": "/dev/sdf",
+                    "Ebs": {
+                        "DeleteOnTermination": True,
+                        "VolumeSize": self.disk_size,
+                        "VolumeType": self.volume_type,
+                        "Encrypted": False,
+                    },
+                }
+            ]
