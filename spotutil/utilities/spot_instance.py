@@ -16,7 +16,8 @@ ec2_conn = boto3.client("ec2", region_name="us-east-1")
 
 
 class Instance(object):
-    def __init__(self, instance_type, key_pair, price, disk_size, ami_id, flux_model):
+    def __init__(self, instance_type, key_pair, price, disk_size, ami_id,
+                 flux_model, launch_template, launch_template_version):
 
         cwd = os.path.dirname(os.path.realpath(__file__))
         self.root_dir = os.path.dirname(cwd)
@@ -39,15 +40,14 @@ class Instance(object):
         self.price = price
         self.ami_id = ami_id
         self.flux_model = flux_model
+        self.launch_template = launch_template
+        self.launch_template_version = launch_template_version
 
         # windows
         if os.name == "nt":
             self.user = os.getenv("username")
         else:
             self.user = os.getenv("USER")
-
-        if flux_model:
-            launch_template = "lt-00205de607ab6d4d9"
 
         self.project = "Global Forest Watch"
         self.job = "Spotutil"
@@ -85,35 +85,42 @@ class Instance(object):
         print("Requesting spot instance")
         self._configure_instance()
 
-
+        # Carbon flux model requires a spot fleet be launched (with 1 instance) using a launch template
+        # created in the AWS ec2 console.
         if self.flux_model:
 
             print("Creating flux model spot fleet")
 
             try:
+                # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.request_spot_fleet
                 self.spot_fleet_request = ec2_conn.request_spot_fleet(SpotFleetRequestConfig={**self.config})
 
-                # Because it takes several seconds for an instance to be created in the fleet.
-                # The instance can't be retrieved immediately.
-                print("Waiting for flux model spot fleet to be created")
+                # Because it takes several seconds for an instance to be created in the fleet,
+                # the instance information can't be retrieved immediately.
+                print("Waiting 15 seconds for flux model spot fleet to be created before obtaining instance ID")
                 time.sleep(15)
 
+                # Obtains information on instances in the spot fleet
                 self.spot_request = ec2_conn.describe_spot_fleet_instances(
                     SpotFleetRequestId=self.spot_fleet_request["SpotFleetRequestId"]
                 )
 
+                # Obtains the SpotInstanceRequestId for the one instance created from the spot fleet request.
+                # This is the same variable as created for non-flux model spot instance requests.
+                self.spot_active_instances = self.spot_request["ActiveInstances"][0]
+                self.request_id = self.spot_request["ActiveInstances"][0]['SpotInstanceRequestId']
+
                 # print("Spot instances full: ", self.spot_request)
                 # print("Spot active instance list: ", self.spot_request["ActiveInstances"])
                 # print("Spot active instances list dict: ", self.spot_request["ActiveInstances"][0])
-                self.spot_active_instances = self.spot_request["ActiveInstances"][0]
                 # print("Spot active instances list dict request id: ", self.spot_active_instances['SpotInstanceRequestId'])
-                self.request_id = self.spot_request["ActiveInstances"][0]['SpotInstanceRequestId']
 
             except ClientError as e:
                 print("Request failed. Please verify if input parameters are valid")
                 print(e.response)
                 sys.exit(1)
 
+        # For non-flux model spot requests-- no spot fleet created, just a single instance
         else:
 
             try:
@@ -127,6 +134,9 @@ class Instance(object):
 
             print(self.spot_request)
             print(self.spot_request["SpotInstanceRequestId"])
+
+            print("Waiting 15 seconds for request to be created before obtaining instance ID")
+            time.sleep(15)
 
             self.request_id = self.spot_request["SpotInstanceRequestId"]
 
@@ -285,11 +295,10 @@ class Instance(object):
         Configure instance request
         """
 
-        # https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/request-spot-instances.html
+        # Configuration for flux model spot fleet is different from configuration for other spot instances
         if self.flux_model == True:
-            print("Creating spot machine from flux model config")
+            print("Creating spot machine from flux model config and launch template")
 
-            # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.request_spot_fleet
             self.config = {
                 "IamFleetRole": "arn:aws:iam::838255262149:role/aws-ec2-spot-fleet-tagging-role",
                 "AllocationStrategy": "capacityOptimized",
@@ -301,32 +310,32 @@ class Instance(object):
                 "LaunchTemplateConfigs": [
                     {
                         "LaunchTemplateSpecification": {
-                            "LaunchTemplateId": "lt-00205de607ab6d4d9",
-                            "Version": "2"
+                            "LaunchTemplateId": self.launch_template,
+                            "Version": self.launch_template_version
                         },
                         "Overrides": [
                             {
-                                "InstanceType": "r5d.large",
+                                "InstanceType": self.instance_type,
                                 "WeightedCapacity": 1,
                                 "SubnetId": "subnet-00335589f5f424283"
                             },
                             {
-                                "InstanceType": "r5d.large",
+                                "InstanceType": self.instance_type,
                                 "WeightedCapacity": 1,
                                 "SubnetId": "subnet-8c2b5ea1"
                             },
                             {
-                                "InstanceType": "r5d.large",
+                                "InstanceType": self.instance_type,
                                 "WeightedCapacity": 1,
                                 "SubnetId": "subnet-08458452c1d05713b"
                             },
                             {
-                                "InstanceType": "r5d.large",
+                                "InstanceType": self.instance_type,
                                 "WeightedCapacity": 1,
                                 "SubnetId": "subnet-116d9a4a"
                             },
                             {
-                                "InstanceType": "r5d.large",
+                                "InstanceType": self.instance_type,
                                 "WeightedCapacity": 1,
                                 "SubnetId": "subnet-037b97cff4493e3a1"
                             }
