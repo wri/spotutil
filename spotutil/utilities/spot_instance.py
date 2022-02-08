@@ -88,73 +88,25 @@ class Instance(object):
 
         if self.flux_model:
 
-            print("Before flux model request")
+            print("Creating flux model spot fleet")
 
             try:
-                # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.request_spot_fleet
-                self.spot_fleet_request = ec2_conn.request_spot_fleet(
-                    SpotFleetRequestConfig={
-                        "IamFleetRole": "arn:aws:iam::838255262149:role/aws-ec2-spot-fleet-tagging-role",
-                        "AllocationStrategy": "capacityOptimized",
-                        "OnDemandAllocationStrategy": "lowestPrice",
-                        "TargetCapacity": 1,
-                        "TerminateInstancesWithExpiration": True,
-                        "LaunchSpecifications": [],
-                        "Type": "request",
-                        "LaunchTemplateConfigs": [
-                            {
-                                "LaunchTemplateSpecification": {
-                                    "LaunchTemplateId": "lt-00205de607ab6d4d9",
-                                    "Version": "2"
-                                },
-                                "Overrides": [
-                                    {
-                                        "InstanceType": "r5d.large",
-                                        "WeightedCapacity": 1,
-                                        "SubnetId": "subnet-00335589f5f424283"
-                                    },
-                                    {
-                                        "InstanceType": "r5d.large",
-                                        "WeightedCapacity": 1,
-                                        "SubnetId": "subnet-8c2b5ea1"
-                                    },
-                                    {
-                                        "InstanceType": "r5d.large",
-                                        "WeightedCapacity": 1,
-                                        "SubnetId": "subnet-08458452c1d05713b"
-                                    },
-                                    {
-                                        "InstanceType": "r5d.large",
-                                        "WeightedCapacity": 1,
-                                        "SubnetId": "subnet-116d9a4a"
-                                    },
-                                    {
-                                        "InstanceType": "r5d.large",
-                                        "WeightedCapacity": 1,
-                                        "SubnetId": "subnet-037b97cff4493e3a1"
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                )
-                # print("Full fleet:", self.spot_fleet_request)
-                # print("Fleet id:", self.spot_fleet_request["SpotFleetRequestId"])
+                self.spot_fleet_request = ec2_conn.request_spot_fleet(SpotFleetRequestConfig={**self.config})
 
                 # Because it takes several seconds for an instance to be created in the fleet.
                 # The instance can't be retrieved immediately.
-                print("Waiting for instance to be created")
+                print("Waiting for flux model spot fleet to be created")
                 time.sleep(15)
 
                 self.spot_request = ec2_conn.describe_spot_fleet_instances(
                     SpotFleetRequestId=self.spot_fleet_request["SpotFleetRequestId"]
                 )
 
-                print("Spot instances full: ", self.spot_request)
-                print("Spot active instance list: ", self.spot_request["ActiveInstances"])
-                print("Spot active instances list dict: ", self.spot_request["ActiveInstances"][0])
+                # print("Spot instances full: ", self.spot_request)
+                # print("Spot active instance list: ", self.spot_request["ActiveInstances"])
+                # print("Spot active instances list dict: ", self.spot_request["ActiveInstances"][0])
                 self.spot_active_instances = self.spot_request["ActiveInstances"][0]
-                print("Spot active instances list dict request id: ", self.spot_active_instances['SpotInstanceRequestId'])
+                # print("Spot active instances list dict request id: ", self.spot_active_instances['SpotInstanceRequestId'])
                 self.request_id = self.spot_request["ActiveInstances"][0]['SpotInstanceRequestId']
 
             except ClientError as e:
@@ -163,8 +115,6 @@ class Instance(object):
                 sys.exit(1)
 
         else:
-
-            print("not flux model")
 
             try:
                 self.spot_request = ec2_conn.request_spot_instances(**self.config)[
@@ -337,7 +287,7 @@ class Instance(object):
 
         # https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/request-spot-instances.html
         if self.flux_model == True:
-            print("Flux model fleet config")
+            print("Creating spot machine from flux model config")
 
             # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.request_spot_fleet
             self.config = {
@@ -386,7 +336,6 @@ class Instance(object):
             }
 
         else:
-            print("not flux model")
             self.config = {
                 "Type": self.request_type,
                 "DryRun": False,
