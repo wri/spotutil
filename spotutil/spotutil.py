@@ -15,7 +15,7 @@ def spotutil():
 @click.option('--price', default=3)
 @click.option('--disk_size', default=500)
 @click.option('--ami-id', default='ami-017dc21b2db099158') #AMI for GDAL-PROCESSOR-20181109
-@click.option('--launch-template')
+@click.option('--flux-model', is_flag=True)
 def new_spot(instance_type, key_pair, price, disk_size, ami_id, flux_model):
     newspot.newspot(instance_type, key_pair, price, disk_size, ami_id, flux_model)
 

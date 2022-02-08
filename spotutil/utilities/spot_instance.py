@@ -46,6 +46,9 @@ class Instance(object):
         else:
             self.user = os.getenv("USER")
 
+        if flux_model:
+            launch_template = "lt-00205de607ab6d4d9"
+
         self.project = "Global Forest Watch"
         self.job = "Spotutil"
         self.product_description = "Linux/UNIX (Amazon VPC)"
@@ -59,7 +62,6 @@ class Instance(object):
             "us-east-1d": "subnet-116d9a4a",
             "us-east-1e": "subnet-037b97cff4493e3a1",
             "us-east-1f": "subnet-037b97cff4493e3a1",
-            # "us-east-1f": "subnet-037b97cff4493e3a1",  # Removed us-east-1f because it doesn't work with r5d machines
         }
 
         self._get_best_price()
@@ -80,19 +82,103 @@ class Instance(object):
         If it does fail, exit.
         """
 
-        print("requesting spot instance")
+        print("Requesting spot instance")
         self._configure_instance()
 
-        try:
-            self.spot_request = ec2_conn.request_spot_instances(**self.config)[
-                "SpotInstanceRequests"
-            ][0]
-        except ClientError as e:
-            print("Request failed. Please verify if input parameters are valid")
-            print(e.response)
-            sys.exit(1)
 
-        self.request_id = self.spot_request["SpotInstanceRequestId"]
+        if self.flux_model:
+
+            print("Before flux model request")
+
+            try:
+                # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.request_spot_fleet
+                self.spot_fleet_request = ec2_conn.request_spot_fleet(
+                    SpotFleetRequestConfig={
+                        "IamFleetRole": "arn:aws:iam::838255262149:role/aws-ec2-spot-fleet-tagging-role",
+                        "AllocationStrategy": "capacityOptimized",
+                        "OnDemandAllocationStrategy": "lowestPrice",
+                        "TargetCapacity": 1,
+                        "TerminateInstancesWithExpiration": True,
+                        "LaunchSpecifications": [],
+                        "Type": "request",
+                        "LaunchTemplateConfigs": [
+                            {
+                                "LaunchTemplateSpecification": {
+                                    "LaunchTemplateId": "lt-00205de607ab6d4d9",
+                                    "Version": "2"
+                                },
+                                "Overrides": [
+                                    {
+                                        "InstanceType": "r5d.large",
+                                        "WeightedCapacity": 1,
+                                        "SubnetId": "subnet-00335589f5f424283"
+                                    },
+                                    {
+                                        "InstanceType": "r5d.large",
+                                        "WeightedCapacity": 1,
+                                        "SubnetId": "subnet-8c2b5ea1"
+                                    },
+                                    {
+                                        "InstanceType": "r5d.large",
+                                        "WeightedCapacity": 1,
+                                        "SubnetId": "subnet-08458452c1d05713b"
+                                    },
+                                    {
+                                        "InstanceType": "r5d.large",
+                                        "WeightedCapacity": 1,
+                                        "SubnetId": "subnet-116d9a4a"
+                                    },
+                                    {
+                                        "InstanceType": "r5d.large",
+                                        "WeightedCapacity": 1,
+                                        "SubnetId": "subnet-037b97cff4493e3a1"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                )
+                # print("Full fleet:", self.spot_fleet_request)
+                # print("Fleet id:", self.spot_fleet_request["SpotFleetRequestId"])
+
+                # Because it takes several seconds for an instance to be created in the fleet.
+                # The instance can't be retrieved immediately.
+                print("Waiting for instance to be created")
+                time.sleep(15)
+
+                self.spot_request = ec2_conn.describe_spot_fleet_instances(
+                    SpotFleetRequestId=self.spot_fleet_request["SpotFleetRequestId"]
+                )
+
+                print("Spot instances full: ", self.spot_request)
+                print("Spot active instance list: ", self.spot_request["ActiveInstances"])
+                print("Spot active instances list dict: ", self.spot_request["ActiveInstances"][0])
+                self.spot_active_instances = self.spot_request["ActiveInstances"][0]
+                print("Spot active instances list dict request id: ", self.spot_active_instances['SpotInstanceRequestId'])
+                self.request_id = self.spot_request["ActiveInstances"][0]['SpotInstanceRequestId']
+
+            except ClientError as e:
+                print("Request failed. Please verify if input parameters are valid")
+                print(e.response)
+                sys.exit(1)
+
+        else:
+
+            print("not flux model")
+
+            try:
+                self.spot_request = ec2_conn.request_spot_instances(**self.config)[
+                    "SpotInstanceRequests"
+                ][0]
+            except ClientError as e:
+                print("Request failed. Please verify if input parameters are valid")
+                print(e.response)
+                sys.exit(1)
+
+            print(self.spot_request)
+            print(self.spot_request["SpotInstanceRequestId"])
+
+            self.request_id = self.spot_request["SpotInstanceRequestId"]
 
         running = False
         while not running:
@@ -248,36 +334,89 @@ class Instance(object):
         """
         Configure instance request
         """
-        self.config = {
-            "Type": self.request_type,
-            "DryRun": False,
-            "LaunchSpecification": {
-                "ImageId": self.ami_id,
-                "KeyName": self.key_pair,
-                "InstanceType": self.instance_type,
-                "NetworkInterfaces": [
+
+        # https://awscli.amazonaws.com/v2/documentation/api/latest/reference/ec2/request-spot-instances.html
+        if self.flux_model == True:
+            print("Flux model fleet config")
+
+            # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.request_spot_fleet
+            self.config = {
+                "IamFleetRole": "arn:aws:iam::838255262149:role/aws-ec2-spot-fleet-tagging-role",
+                "AllocationStrategy": "capacityOptimized",
+                "OnDemandAllocationStrategy": "lowestPrice",
+                "TargetCapacity": 1,
+                "TerminateInstancesWithExpiration": True,
+                "LaunchSpecifications": [],
+                "Type": "request",
+                "LaunchTemplateConfigs": [
                     {
-                        "AssociatePublicIpAddress": True,
-                        "DeviceIndex": 0,
-                        "SubnetId": self.subnet_id,
-                        "Groups": self.security_group_ids,
+                        "LaunchTemplateSpecification": {
+                            "LaunchTemplateId": "lt-00205de607ab6d4d9",
+                            "Version": "2"
+                        },
+                        "Overrides": [
+                            {
+                                "InstanceType": "r5d.large",
+                                "WeightedCapacity": 1,
+                                "SubnetId": "subnet-00335589f5f424283"
+                            },
+                            {
+                                "InstanceType": "r5d.large",
+                                "WeightedCapacity": 1,
+                                "SubnetId": "subnet-8c2b5ea1"
+                            },
+                            {
+                                "InstanceType": "r5d.large",
+                                "WeightedCapacity": 1,
+                                "SubnetId": "subnet-08458452c1d05713b"
+                            },
+                            {
+                                "InstanceType": "r5d.large",
+                                "WeightedCapacity": 1,
+                                "SubnetId": "subnet-116d9a4a"
+                            },
+                            {
+                                "InstanceType": "r5d.large",
+                                "WeightedCapacity": 1,
+                                "SubnetId": "subnet-037b97cff4493e3a1"
+                            }
+                        ]
                     }
-                ],
-            },
-        }
+                ]
+            }
+
+        else:
+            print("not flux model")
+            self.config = {
+                "Type": self.request_type,
+                "DryRun": False,
+                "LaunchSpecification": {
+                    "ImageId": self.ami_id,
+                    "KeyName": self.key_pair,
+                    "InstanceType": self.instance_type,
+                    "NetworkInterfaces": [
+                        {
+                            "AssociatePublicIpAddress": True,
+                            "DeviceIndex": 0,
+                            "SubnetId": self.subnet_id,
+                            "Groups": self.security_group_ids,
+                        }
+                    ],
+                },
+            }
 
         if self.price:
             self.config["SpotPrice"] = str(self.price)
 
-        if self.disk_size:
-            self.config["LaunchSpecification"]["BlockDeviceMappings"] = [
-                {
-                    "DeviceName": "/dev/sdf",
-                    "Ebs": {
-                        "DeleteOnTermination": True,
-                        "VolumeSize": self.disk_size,
-                        "VolumeType": self.volume_type,
-                        "Encrypted": False,
-                    },
-                }
-            ]
+        # if self.disk_size:
+        #     self.config["LaunchSpecification"]["BlockDeviceMappings"] = [
+        #         {
+        #             "DeviceName": "/dev/sdf",
+        #             "Ebs": {
+        #                 "DeleteOnTermination": True,
+        #                 "VolumeSize": self.disk_size,
+        #                 "VolumeType": self.volume_type,
+        #                 "Encrypted": False,
+        #             },
+        #         }
+        #     ]
