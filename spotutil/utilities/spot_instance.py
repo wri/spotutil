@@ -8,15 +8,18 @@ import socket
 import time
 
 import boto.ec2
+import boto3.ec2
 from retrying import retry
 
 from . import util
 
-ec2_conn = boto.ec2.connect_to_region('us-east-1')
+boto_ec2_conn = boto.ec2.connect_to_region('us-east-1')
+boto3_ec2_conn = boto3.client('ec2', region_name='us-east-1')
 
 
 class Instance(object):
-    def __init__(self, instance_type, key_pair, price, disk_size, ami_id):
+    def __init__(self, instance_type, key_pair, price, disk_size, ami_id,
+                 flux_model, launch_template, launch_template_version):
 
         cwd = os.path.dirname(os.path.realpath(__file__))
         self.root_dir = os.path.dirname(cwd)
@@ -31,39 +34,121 @@ class Instance(object):
         self.disk_size = disk_size
         self.price = price
         self.ami_id = ami_id
+        self.flux_model = flux_model
+        self.launch_template = launch_template
+        self.launch_template_version = launch_template_version
 
         print('Creating a instance type {}'.format(self.instance_type))
 
     def start(self):
-
         self.make_request()
-
         self.wait_for_instance()
 
     def make_request(self):
-        print('requesting spot instance')
 
-        bdm = self.create_hard_disk()
-        ip = self.create_ip()
+        if self.flux_model:
+            print('Requesting flux model instance')
 
-        config = {'key_name': self.key_pair,
-                  'network_interfaces': ip,
-                  'dry_run': False,
-                  'instance_type': self.instance_type,
-                  'block_device_map': bdm,
-                  }
+            try:
+                # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.request_spot_fleet
+                self.spot_fleet_request = boto3_ec2_conn.request_spot_fleet(
+                    SpotFleetRequestConfig={
+                    "IamFleetRole": "arn:aws:iam::838255262149:role/aws-ec2-spot-fleet-tagging-role",
+                    "AllocationStrategy": "capacityOptimized",
+                    "OnDemandAllocationStrategy": "lowestPrice",
+                    "TargetCapacity": 1,
+                    "TerminateInstancesWithExpiration": True,
+                    "LaunchSpecifications": [],
+                    "Type": "request",
+                    "LaunchTemplateConfigs": [
+                        {
+                            "LaunchTemplateSpecification": {
+                                "LaunchTemplateId": self.launch_template,
+                                # This contains userdata to initialize machine
+                                "Version": self.launch_template_version
+                            },
+                            "Overrides": [
+                                {
+                                    "InstanceType": self.instance_type,
+                                    "WeightedCapacity": 1,
+                                    "SubnetId": "subnet-00335589f5f424283"
+                                },
+                                {
+                                    "InstanceType": self.instance_type,
+                                    "WeightedCapacity": 1,
+                                    "SubnetId": "subnet-8c2b5ea1"
+                                },
+                                {
+                                    "InstanceType": self.instance_type,
+                                    "WeightedCapacity": 1,
+                                    "SubnetId": "subnet-08458452c1d05713b"
+                                },
+                                {
+                                    "InstanceType": self.instance_type,
+                                    "WeightedCapacity": 1,
+                                    "SubnetId": "subnet-116d9a4a"
+                                },
+                                {
+                                    "InstanceType": self.instance_type,
+                                    "WeightedCapacity": 1,
+                                    "SubnetId": "subnet-037b97cff4493e3a1"
+                                }
+                            ]
+                        }
+                    ]
+                })
 
-        try:
-            self.spot_request = ec2_conn.request_spot_instances(self.price, self.ami_id, **config)[0]
-        except boto.exception.EC2ResponseError:
-            print('Request failed. Please verify if input parameters are valid'.format(self.key_pair))
-            sys.exit(1)
+                # Because it takes several seconds for an instance to be created in the fleet,
+                # the instance information can't be retrieved immediately.
+                print("Waiting 15 seconds for flux model spot fleet to be created before obtaining instance ID")
+                time.sleep(15)
+
+                # Obtains information on instances in the spot fleet
+                # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.describe_spot_fleet_instances
+                self.spot_request = boto3_ec2_conn.describe_spot_fleet_instances(
+                    SpotFleetRequestId=self.spot_fleet_request["SpotFleetRequestId"]
+                )
+
+                # Obtains the SpotInstanceRequestId for the one instance created from the spot fleet request.
+                # This is the same variable as created for non-flux model spot instance requests.
+                self.spot_active_instances = self.spot_request["ActiveInstances"][0]
+                self.request_id = self.spot_request["ActiveInstances"][0]['SpotInstanceRequestId']
+
+                # print("Spot instances full: ", self.spot_request)
+                # print("Spot active instance list: ", self.spot_request["ActiveInstances"])
+                # print("Spot active instances list dict: ", self.spot_request["ActiveInstances"][0])
+                # print("Spot active instances list dict request id: ", self.spot_active_instances['SpotInstanceRequestId'])
+
+            except ClientError as e:
+                print("Request failed. Please verify if input parameters are valid")
+                print(e.response)
+                sys.exit(1)
+
+        else:
+
+            print('Requesting spot instance')
+
+            bdm = self.create_hard_disk()
+            ip = self.create_ip()
+
+            config = {'key_name': self.key_pair,
+                      'network_interfaces': ip,
+                      'dry_run': False,
+                      'instance_type': self.instance_type,
+                      'block_device_map': bdm,
+                      }
+
+            try:
+                self.spot_request = boto_ec2_conn.request_spot_instances(self.price, self.ami_id, **config)[0]
+            except boto.exception.EC2ResponseError:
+                print('Request failed. Please verify if input parameters are valid'.format(self.key_pair))
+                sys.exit(1)
 
         running = False
 
         while not running:
             time.sleep(5)
-            self.spot_request = ec2_conn.get_all_spot_instance_requests(self.spot_request.id)[0]
+            self.spot_request = boto_ec2_conn.get_all_spot_instance_requests(self.spot_request.id)[0]
             state = self.spot_request.state
             print('Spot id {} says: {}'.format(self.spot_request.id, self.spot_request.status.code,
                                                self.spot_request.status.message))
@@ -84,7 +169,7 @@ class Instance(object):
     def wait_for_instance(self):
 
         print('Instance ID is {}'.format(self.spot_request.instance_id))
-        reservations = ec2_conn.get_all_reservations(instance_ids=[self.spot_request.instance_id])
+        reservations = boto_ec2_conn.get_all_reservations(instance_ids=[self.spot_request.instance_id])
         self.instance = reservations[0].instances[0]
 
         status = self.instance.update()
