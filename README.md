@@ -53,9 +53,13 @@ r5d.large, r5d.xlarge, r5d.2xlarge, r5d.4xlarge, r5d.8xlarge, r5d.12xlarge, r5d.
 
 For `<key_pair>` use name for any key pair registered with your AWS account. Make sure you are in posession of the private key. You will need it to SSH into the machine
 
-Providing an r5d instance type automatically launches an instance configured to run the forest carbon flux model.
+Providing an r5d instance type automatically launches an instance configured to run the forest carbon flux model,
+including all the user data found in the launch template.
 The `--carbon-flux` flag can optionally be added to r5d instances. The `--carbon-flux` flag cannot be added to other
-instance type requests. (e.g., m4 and r4). 
+instance type requests. (e.g., m4 and r4). For flux model runs, `--launch-template` and `--launch-template-version` can
+also optionally be specified if the user does not want to use the default template or version. The current template is
+carbon_flux_model_python3_v2 
+(https://console.aws.amazon.com/ec2/v2/home?region=us-east-1#LaunchTemplateDetails:launchTemplateId=lt-00205de607ab6d4d9).
 
 
 **List the active spots instances** 
