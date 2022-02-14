@@ -204,37 +204,54 @@ class Instance(object):
     @retry(wait_fixed=2000, stop_max_attempt_number=10)
     def wait_for_instance(self):
 
-        print('Instance ID is {}'.format(self.spot_request.instance_id))
-        reservations = boto_ec2_conn.get_all_reservations(instance_ids=[self.spot_request.instance_id])
-        self.instance = reservations[0].instances[0]
+        if self.flux_model:
 
-        status = self.instance.update()
+            print("Instance ID is {}".format(self.spot_request["InstanceId"]))
 
-        while status == 'pending':
-            time.sleep(5)
+            ec2 = boto3.resource("ec2")
+            self.instance = ec2.Instance(self.spot_request["InstanceId"])
+            self._tag_instance()
+
+            while self.instance.state == "pending":
+                time.sleep(5)
+                self.instance.reload()
+                print("Instance {} is {}".format(self.instance.id, self.instance.state))
+
+            self._instance_ips()
+
+        else:
+
+            print('Instance ID is {}'.format(self.spot_request.instance_id))
+            reservations = boto_ec2_conn.get_all_reservations(instance_ids=[self.spot_request.instance_id])
+            self.instance = reservations[0].instances[0]
+
             status = self.instance.update()
-            print('Instance {} is {}'.format(self.instance.id, status))
-            
-        print('Server IP is {}'.format(self.instance.ip_address))
-        print('Private IP is {}'.format(self.instance.private_ip_address))
 
-        if not self.ssh_ip:
-            if util.in_office():
-                self.ssh_ip = self.instance.ip_address
-            else:
-                print("Based on your IP, it appears that you're out of the office \n" \
-                      "Make sure to connect to the VPN and then ssh/putty using the private IP!")
-                self.ssh_ip = self.instance.private_ip_address
+            while status == 'pending':
+                time.sleep(5)
+                status = self.instance.update()
+                print('Instance {} is {}'.format(self.instance.id, status))
+
+            print('Server IP is {}'.format(self.instance.ip_address))
+            print('Private IP is {}'.format(self.instance.private_ip_address))
+
+            if not self.ssh_ip:
+                if util.in_office():
+                    self.ssh_ip = self.instance.ip_address
+                else:
+                    print("Based on your IP, it appears that you're out of the office \n" \
+                          "Make sure to connect to the VPN and then ssh/putty using the private IP!")
+                    self.ssh_ip = self.instance.private_ip_address
+
+            instance_tag = 'TEMP-SPOT-{}'.format(self.user)
+            self.instance.add_tag("Name", instance_tag)  # change self.tag to TEMP-<usenrmae> SPOT
+            self.instance.add_tag("Project", self.project)
+            self.instance.add_tag("Pricing", "Spot")
+            self.instance.add_tag("Job", self.job)
+            self.instance.add_tag("User", self.user)
 
         print('Sleeping for 30 seconds to make sure server is ready')
         time.sleep(30)
-
-        # instance_tag = 'TEMP-SPOT-{}'.format(self.user)
-        # self.instance.add_tag("Name", instance_tag)  # change self.tag to TEMP-<usenrmae> SPOT
-        # self.instance.add_tag("Project", "Global Forest Watch")
-        # self.instance.add_tag("Pricing", "Spot")
-        # self.instance.add_tag("Job", "Spotutil")
-        # self.instance.add_tag("User", self.user)
 
         self.check_instance_ready()
         
@@ -290,3 +307,33 @@ class Instance(object):
             self.spot_request.add_tag('User', self.user)
             self.spot_request.add_tag('Project', self.project)
             self.spot_request.add_tag('Job', self.job)
+
+    def _tag_instance(self):
+        """
+        Add tags to instance for internal accounting
+        """
+        tags = [
+            {"Key": "User", "Value": self.user},
+            {"Key": "Project", "Value": self.project},
+            {"Key": "Job", "Value": self.job},
+            {"Key": "Pricing", "Value": "Spot"},
+        ]
+        self.instance.create_tags(DryRun=False, Tags=tags)
+
+    def _instance_ips(self):
+        """
+        Print out instance public and private IP
+        Set SSH IP based on user location (In WRI office or not)
+        """
+        print("Server IP is {}".format(self.instance.public_ip_address))
+        print("Private IP is {}".format(self.instance.private_ip_address))
+
+        if not self.ssh_ip:
+            if util.in_office():
+                self.ssh_ip = self.instance.public_ip_address
+            else:
+                print(
+                    "Based on your IP, it appears that you're out of the office \n"
+                    "Make sure to connect to the VPN and then ssh/putty using the private IP!"
+                )
+                self.ssh_ip = self.instance.private_ip_address

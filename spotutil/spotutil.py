@@ -13,7 +13,7 @@ def spotutil():
 @click.argument('instance_type')
 @click.argument('key_pair')
 @click.option('--price', default=3)
-@click.option('--disk_size', default=500)
+@click.option('--disk-size', default=500)
 @click.option('--ami-id', default='ami-017dc21b2db099158') #AMI for GDAL-PROCESSOR-20181109
 @click.option('--flux-model', is_flag=True)   # Denotes if a spot instance for the carbon flux model should be created
 @click.option('--launch-template', default='lt-00205de607ab6d4d9')  # ec2 launch template to use for flux model instance
