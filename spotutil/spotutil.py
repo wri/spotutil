@@ -26,7 +26,7 @@ def new_spot(instance_type, key_pair, price, disk_size, ami_id,
 
 @spotutil.command('ls')
 def list_spots():
-    click.echo('Listing active Spots')
+    click.echo('Listing active spot machines')
     listspot.listspot()
 
 

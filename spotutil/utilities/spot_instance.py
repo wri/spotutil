@@ -7,7 +7,6 @@ import sys
 import socket
 import time
 
-import boto.ec2
 import boto3.ec2
 from retrying import retry
 from botocore.exceptions import ClientError
@@ -42,7 +41,6 @@ class Instance(object):
         self.launch_template = launch_template
         self.launch_template_version = launch_template_version
 
-        # windows
         if os.name == 'nt':
             self.user = os.getenv('username')
         else:
@@ -60,7 +58,7 @@ class Instance(object):
             "us-east-1c": "subnet-08458452c1d05713b",
             "us-east-1d": "subnet-116d9a4a",
             "us-east-1e": "subnet-037b97cff4493e3a1",
-            # "us-east-1f": "subnet-0360516ee122586ff",
+            # "us-east-1f": "subnet-0360516ee122586ff", # Disables because r5d instances aren't available in it.
         }
 
         self._get_best_price()
@@ -71,12 +69,13 @@ class Instance(object):
             )
         )
 
+
     def _get_best_price(self):
         """
-        Check for current prices and select subnet in zone with lowest price
+        Checks for current prices and select subnet in zone with lowest price
         """
 
-        # ec2 instance series (e.g., m4, r5d)
+        # ec2 instance series (e.g., m4, r4, r5d)
         series = self.instance_type.split('.')[0]
 
         price_history = ec2_conn.describe_spot_price_history(
@@ -99,13 +98,15 @@ class Instance(object):
         self.subnet_id = self.subnet_ids[best_price[0]]
         self.current_price = best_price[1]
 
+
     def start(self):
         self.make_request()
         self.wait_for_instance()
 
+
     def make_request(self):
         """
-        Requests spot instance
+        Requests spot instance creation
         """
 
         # Gets correct configuration for ec2 instance: m4/r4 or r5d (for carbon flux model)
@@ -163,25 +164,21 @@ class Instance(object):
         running = False
 
         while not running:
-            time.sleep(5)
+            self._update_request_state()
 
-            # Obtain spot request state
-            self.spot_request = ec2_conn.describe_spot_instance_requests(
-                SpotInstanceRequestIds=[self.request_id]
-            )["SpotInstanceRequests"][0]
-            state = self.spot_request["State"]
-
-            print(
-                "Spot request {}. Status: {} - {}".format(
-                    self.spot_request["State"],
-                    self.spot_request["Status"]["Code"],
-                    self.spot_request["Status"]["Message"],
-                )
-            )
-
-            if state == 'active':
+            if self.state == "active":
                 running = True
                 self._tag_request()
+
+            elif self.state == "failed":
+                print(
+                    "{} - {}".format(
+                        self.spot_request["Fault"]["Code"],
+                        self.spot_request["Fault"]["Message"],
+                    )
+                )
+                sys.exit(1)
+
 
     def _configure_instance(self):
         """
@@ -211,27 +208,27 @@ class Instance(object):
                             {
                                 "InstanceType": self.instance_type,
                                 "WeightedCapacity": 1,
-                                "SubnetId": "subnet-00335589f5f424283"
+                                "SubnetId": list(self.subnet_ids.values())[0]
                             },
                             {
                                 "InstanceType": self.instance_type,
                                 "WeightedCapacity": 1,
-                                "SubnetId": "subnet-8c2b5ea1"
+                                "SubnetId": list(self.subnet_ids.values())[1]
                             },
                             {
                                 "InstanceType": self.instance_type,
                                 "WeightedCapacity": 1,
-                                "SubnetId": "subnet-08458452c1d05713b"
+                                "SubnetId": list(self.subnet_ids.values())[2]
                             },
                             {
                                 "InstanceType": self.instance_type,
                                 "WeightedCapacity": 1,
-                                "SubnetId": "subnet-116d9a4a"
+                                "SubnetId": list(self.subnet_ids.values())[3]
                             },
                             {
                                 "InstanceType": self.instance_type,
                                 "WeightedCapacity": 1,
-                                "SubnetId": "subnet-037b97cff4493e3a1"
+                                "SubnetId": list(self.subnet_ids.values())[4]
                             }
                         ]
                     }
@@ -250,7 +247,7 @@ class Instance(object):
                         {
                             "AssociatePublicIpAddress": True,
                             "DeviceIndex": 0,
-                            "SubnetId": "subnet-00335589f5f424283",
+                            "SubnetId": self.subnet_id,
                             "Groups": self.security_group_ids,
                         }
                     ],
@@ -268,6 +265,29 @@ class Instance(object):
                     ]
                 },
             }
+
+
+    def _update_request_state(self):
+        """
+        Check state of request and update self.state
+        """
+
+        time.sleep(5)
+
+        # Obtain spot request state
+        self.spot_request = ec2_conn.describe_spot_instance_requests(
+            SpotInstanceRequestIds=[self.request_id]
+        )["SpotInstanceRequests"][0]
+        self.state = self.spot_request["State"]
+
+        print(
+            "Spot request {}. Status: {} -- {}".format(
+                self.spot_request["State"],
+                self.spot_request["Status"]["Code"],
+                self.spot_request["Status"]["Message"],
+            )
+        )
+
 
     @retry(wait_fixed=2000, stop_max_attempt_number=10)
     def wait_for_instance(self):
@@ -308,9 +328,10 @@ class Instance(object):
                 print("something's wrong with %s:%d. Exception is %s" % (self.ssh_ip, port, e))
                 time.sleep(10)
 
+
     def _tag_request(self):
         """
-        Add tags to instance for internal accounting
+        Adds tags to instance for internal accounting
         """
 
         tags = [
@@ -323,7 +344,7 @@ class Instance(object):
 
     def _tag_instance(self):
         """
-        Add tags to instance for internal accounting
+        Adds tags to instance for internal accounting
         """
         tags = [
             {"Key": "User", "Value": self.user},
@@ -336,8 +357,8 @@ class Instance(object):
 
     def _instance_ips(self):
         """
-        Print out instance public and private IP
-        Set SSH IP based on user location (In WRI office or not)
+        Prints out instance public and private IP
+        Sets SSH IP based on user location (in WRI DC office or not)
         """
         print("Server IP is {}".format(self.instance.public_ip_address))
         print("Private IP is {}".format(self.instance.private_ip_address))
