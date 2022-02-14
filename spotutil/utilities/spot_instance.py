@@ -60,17 +60,24 @@ class Instance(object):
             "us-east-1c": "subnet-08458452c1d05713b",
             "us-east-1d": "subnet-116d9a4a",
             "us-east-1e": "subnet-037b97cff4493e3a1",
-            "us-east-1f": "subnet-0360516ee122586ff",
+            # "us-east-1f": "subnet-0360516ee122586ff",
         }
 
-        # self._get_best_price()
+        self._get_best_price()
 
-        print('Creating an instance type {}'.format(self.instance_type))
+        print(
+            "Creating an instance type {} in zone {}. Current price: ${}".format(
+                self.instance_type, self.zone, self.current_price
+            )
+        )
 
     def _get_best_price(self):
         """
         Check for current prices and select subnet in zone with lowest price
         """
+
+        # ec2 instance series (e.g., m4, r5d)
+        series = self.instance_type.split('.')[0]
 
         price_history = ec2_conn.describe_spot_price_history(
             InstanceTypes=[self.instance_type],
@@ -80,14 +87,17 @@ class Instance(object):
 
         best_price = None
 
+        # Ignores region us-east-1f for r5d series because that series doesn't work in that region.
+        # All other series can consider any region for cheapest region.
         for p in price_history["SpotPriceHistory"]:
+            if series == "r5d" and p["AvailabilityZone"] == "us-east-1f":
+                continue
             if not best_price or float(p["SpotPrice"]) < best_price[1]:
                 best_price = (p["AvailabilityZone"], float(p["SpotPrice"]))
 
         self.zone = best_price[0]
         self.subnet_id = self.subnet_ids[best_price[0]]
         self.current_price = best_price[1]
-
 
     def start(self):
         self.make_request()
@@ -275,8 +285,8 @@ class Instance(object):
 
         self._instance_ips()
 
-        print('Sleeping for 20 seconds to make sure server is ready')
-        time.sleep(20)
+        print('Sleeping for 30 seconds to make sure server is ready')
+        time.sleep(30)
 
         self.check_instance_ready()
         
