@@ -51,6 +51,7 @@ def listspot():
                 spot_dict['external_ip'] = external_ip
                 spot_dict['user'] = user
                 spot_dict['id'] = r.id
+                spot_dict['instance_type'] = instance_type
                 spot_info_list.append(spot_dict)
 
         print(table)

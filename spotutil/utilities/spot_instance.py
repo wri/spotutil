@@ -61,6 +61,13 @@ class Instance(object):
             # "us-east-1f": "subnet-0360516ee122586ff", # Disables because r5d instances aren't available in it.
         }
 
+        # ec2 instance series (e.g., m4, r4, r5d)
+        self.series = self.instance_type.split('.')[0]
+
+        # Assume that if a r5d instance is asked for, a flux model instance should be launched
+        if self.series == "r5d":
+            self.flux_model = True
+
         self._get_best_price()
 
         print(
@@ -75,9 +82,6 @@ class Instance(object):
         Checks for current prices and select subnet in zone with lowest price
         """
 
-        # ec2 instance series (e.g., m4, r4, r5d)
-        series = self.instance_type.split('.')[0]
-
         price_history = ec2_conn.describe_spot_price_history(
             InstanceTypes=[self.instance_type],
             MaxResults=len(self.subnet_ids.keys()),
@@ -89,7 +93,7 @@ class Instance(object):
         # Ignores region us-east-1f for r5d series because that series doesn't work in that region.
         # All other series can consider any region for cheapest region.
         for p in price_history["SpotPriceHistory"]:
-            if series == "r5d" and p["AvailabilityZone"] == "us-east-1f":
+            if self.series == "r5d" and p["AvailabilityZone"] == "us-east-1f":
                 continue
             if not best_price or float(p["SpotPrice"]) < best_price[1]:
                 best_price = (p["AvailabilityZone"], float(p["SpotPrice"]))
@@ -325,7 +329,7 @@ class Instance(object):
                 break
                 
             except Exception as e: 
-                print("something's wrong with %s:%d. Exception is %s" % (self.ssh_ip, port, e))
+                print("Something's wrong with %s:%d. Exception is %s" % (self.ssh_ip, port, e))
                 time.sleep(10)
 
 
