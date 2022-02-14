@@ -14,9 +14,7 @@ from botocore.exceptions import ClientError
 
 from . import util
 
-boto_ec2_conn = boto.ec2.connect_to_region('us-east-1')
-boto3_ec2_conn = boto3.client('ec2', region_name='us-east-1')
-
+ec2_conn = boto3.client('ec2', region_name='us-east-1')
 
 class Instance(object):
     def __init__(self, instance_type, key_pair, price, disk_size, ami_id,
@@ -62,25 +60,55 @@ class Instance(object):
             "us-east-1c": "subnet-08458452c1d05713b",
             "us-east-1d": "subnet-116d9a4a",
             "us-east-1e": "subnet-037b97cff4493e3a1",
-            "us-east-1f": "subnet-037b97cff4493e3a1",
+            "us-east-1f": "subnet-0360516ee122586ff",
         }
 
-        print('Creating a instance type {}'.format(self.instance_type))
+        # self._get_best_price()
+
+        print('Creating an instance type {}'.format(self.instance_type))
+
+    def _get_best_price(self):
+        """
+        Check for current prices and select subnet in zone with lowest price
+        """
+
+        price_history = ec2_conn.describe_spot_price_history(
+            InstanceTypes=[self.instance_type],
+            MaxResults=len(self.subnet_ids.keys()),
+            ProductDescriptions=[self.product_description],
+        )
+
+        best_price = None
+
+        for p in price_history["SpotPriceHistory"]:
+            if not best_price or float(p["SpotPrice"]) < best_price[1]:
+                best_price = (p["AvailabilityZone"], float(p["SpotPrice"]))
+
+        self.zone = best_price[0]
+        self.subnet_id = self.subnet_ids[best_price[0]]
+        self.current_price = best_price[1]
+
 
     def start(self):
         self.make_request()
         self.wait_for_instance()
 
     def make_request(self):
+        """
+        Requests spot instance
+        """
 
+        # Gets correct configuration for ec2 instance: m4/r4 or r5d (for carbon flux model)
         self._configure_instance()
 
+        # Flux model and non-flux model instances are created by different routes:
+        # fleet request vs. instance request, respectively
         if self.flux_model:
-            print('Requesting flux model instance')
+            print('Requesting flux model spot instance')
 
             try:
                 # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.request_spot_fleet
-                self.spot_fleet_request = boto3_ec2_conn.request_spot_fleet(SpotFleetRequestConfig={**self.config})
+                self.spot_fleet_request = ec2_conn.request_spot_fleet(SpotFleetRequestConfig={**self.config})
 
                 # Because it takes several seconds for an instance to be created in the fleet,
                 # the instance information can't be retrieved immediately.
@@ -89,7 +117,7 @@ class Instance(object):
 
                 # Obtains information on instances in the spot fleet
                 # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.describe_spot_fleet_instances
-                self.spot_request = boto3_ec2_conn.describe_spot_fleet_instances(
+                self.spot_request = ec2_conn.describe_spot_fleet_instances(
                     SpotFleetRequestId=self.spot_fleet_request["SpotFleetRequestId"]
                 )
 
@@ -109,12 +137,11 @@ class Instance(object):
                 sys.exit(1)
 
         else:
-
             print('Requesting spot instance')
 
             # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.request_spot_instances
             try:
-                self.spot_request = boto3_ec2_conn.request_spot_instances(**self.config)[
+                self.spot_request = ec2_conn.request_spot_instances(**self.config)[
                     "SpotInstanceRequests"
                 ][0]
                 self.request_id = self.spot_request["SpotInstanceRequestId"]
@@ -128,7 +155,8 @@ class Instance(object):
         while not running:
             time.sleep(5)
 
-            self.spot_request = boto3_ec2_conn.describe_spot_instance_requests(
+            # Obtain spot request state
+            self.spot_request = ec2_conn.describe_spot_instance_requests(
                 SpotInstanceRequestIds=[self.request_id]
             )["SpotInstanceRequests"][0]
             state = self.spot_request["State"]
@@ -147,7 +175,7 @@ class Instance(object):
 
     def _configure_instance(self):
         """
-        Configure instance request
+        Configures instance request
         """
 
         # Configuration for flux model spot fleet is different from configuration for other spot instances
@@ -168,6 +196,7 @@ class Instance(object):
                             "LaunchTemplateId": self.launch_template,   # This contains userdata to initialize machine
                             "Version": self.launch_template_version
                         },
+                        # r5d instances do not work in region us-east-1f, so not provided as a possibility
                         "Overrides": [
                             {
                                 "InstanceType": self.instance_type,
@@ -230,22 +259,6 @@ class Instance(object):
                 },
             }
 
-
-        # else:
-        #
-        #     bdm = self.create_hard_disk()
-        #     ip = self.create_ip()
-        #
-        #     self.config = {
-        #               'key_name': self.key_pair,
-        #               'network_interfaces': ip,
-        #               'dry_run': False,
-        #               'instance_type': self.instance_type,
-        #               'block_device_map': bdm,
-        #               }
-
-
-
     @retry(wait_fixed=2000, stop_max_attempt_number=10)
     def wait_for_instance(self):
 
@@ -262,34 +275,16 @@ class Instance(object):
 
         self._instance_ips()
 
-        print('Sleeping for 30 seconds to make sure server is ready')
-        time.sleep(30)
+        print('Sleeping for 20 seconds to make sure server is ready')
+        time.sleep(20)
 
         self.check_instance_ready()
         
-    def create_hard_disk(self):
 
-        dev_sda1 = boto.ec2.blockdevicemapping.EBSBlockDeviceType()
-        dev_sda1.size = self.disk_size
-        dev_sda1.delete_on_termination = True
-
-        bdm = boto.ec2.blockdevicemapping.BlockDeviceMapping()
-        bdm['/dev/sda1'] = dev_sda1
-
-        return bdm
-
-    def create_ip(self):
-
-        subnet_id = 'subnet-116d9a4a'
-
-        interface = boto.ec2.networkinterface.NetworkInterfaceSpecification(subnet_id=subnet_id,
-                                                                    groups=self.security_group_ids,
-                                                                    associate_public_ip_address=True)
-        interfaces = boto.ec2.networkinterface.NetworkInterfaceCollection(interface)
-
-        return interfaces
-        
     def check_instance_ready(self):
+        """
+        Tests SSH connection to spot machine
+        """
 
         s = socket.socket()
         port = 22  # port number is a number, not string
@@ -304,13 +299,16 @@ class Instance(object):
                 time.sleep(10)
 
     def _tag_request(self):
+        """
+        Add tags to instance for internal accounting
+        """
 
         tags = [
             {"Key": "User", "Value": self.user},
             {"Key": "Project", "Value": self.project},
             {"Key": "Job", "Value": self.job},
         ]
-        boto3_ec2_conn.create_tags(Resources=[self.request_id], Tags=tags)
+        ec2_conn.create_tags(Resources=[self.request_id], Tags=tags)
 
 
     def _tag_instance(self):
