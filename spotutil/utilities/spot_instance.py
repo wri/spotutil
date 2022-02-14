@@ -10,6 +10,7 @@ import time
 import boto.ec2
 import boto3.ec2
 from retrying import retry
+from botocore.exceptions import ClientError
 
 from . import util
 
@@ -72,57 +73,14 @@ class Instance(object):
 
     def make_request(self):
 
+        self._configure_instance()
+
         if self.flux_model:
             print('Requesting flux model instance')
 
             try:
                 # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.request_spot_fleet
-                self.spot_fleet_request = boto3_ec2_conn.request_spot_fleet(
-                    SpotFleetRequestConfig={
-                    "IamFleetRole": "arn:aws:iam::838255262149:role/aws-ec2-spot-fleet-tagging-role",
-                    "AllocationStrategy": "capacityOptimized",
-                    "OnDemandAllocationStrategy": "lowestPrice",
-                    "TargetCapacity": 1,
-                    "TerminateInstancesWithExpiration": True,
-                    "LaunchSpecifications": [],
-                    "Type": "request",
-                    "LaunchTemplateConfigs": [
-                        {
-                            "LaunchTemplateSpecification": {
-                                "LaunchTemplateId": self.launch_template,
-                                # This contains userdata to initialize machine
-                                "Version": self.launch_template_version
-                            },
-                            "Overrides": [
-                                {
-                                    "InstanceType": self.instance_type,
-                                    "WeightedCapacity": 1,
-                                    "SubnetId": "subnet-00335589f5f424283"
-                                },
-                                {
-                                    "InstanceType": self.instance_type,
-                                    "WeightedCapacity": 1,
-                                    "SubnetId": "subnet-8c2b5ea1"
-                                },
-                                {
-                                    "InstanceType": self.instance_type,
-                                    "WeightedCapacity": 1,
-                                    "SubnetId": "subnet-08458452c1d05713b"
-                                },
-                                {
-                                    "InstanceType": self.instance_type,
-                                    "WeightedCapacity": 1,
-                                    "SubnetId": "subnet-116d9a4a"
-                                },
-                                {
-                                    "InstanceType": self.instance_type,
-                                    "WeightedCapacity": 1,
-                                    "SubnetId": "subnet-037b97cff4493e3a1"
-                                }
-                            ]
-                        }
-                    ]
-                })
+                self.spot_fleet_request = boto3_ec2_conn.request_spot_fleet(SpotFleetRequestConfig={**self.config})
 
                 # Because it takes several seconds for an instance to be created in the fleet,
                 # the instance information can't be retrieved immediately.
@@ -145,7 +103,7 @@ class Instance(object):
                 # print("Spot active instances list dict: ", self.spot_request["ActiveInstances"][0])
                 # print("Spot active instances list dict request id: ", self.spot_active_instances['SpotInstanceRequestId'])
 
-            except boto3_ec2_conn.ClientError as e:
+            except ClientError as e:
                 print("Request failed. Please verify if input parameters are valid")
                 print(e.response)
                 sys.exit(1)
@@ -154,20 +112,15 @@ class Instance(object):
 
             print('Requesting spot instance')
 
-            bdm = self.create_hard_disk()
-            ip = self.create_ip()
-
-            config = {'key_name': self.key_pair,
-                      'network_interfaces': ip,
-                      'dry_run': False,
-                      'instance_type': self.instance_type,
-                      'block_device_map': bdm,
-                      }
-
+            # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.request_spot_instances
             try:
-                self.spot_request = boto_ec2_conn.request_spot_instances(self.price, self.ami_id, **config)[0]
-            except boto.exception.EC2ResponseError:
-                print('Request failed. Please verify if input parameters are valid'.format(self.key_pair))
+                self.spot_request = boto3_ec2_conn.request_spot_instances(**self.config)[
+                    "SpotInstanceRequests"
+                ][0]
+                self.request_id = self.spot_request["SpotInstanceRequestId"]
+            except ClientError as e:
+                print("Request failed. Please verify if input parameters are valid")
+                print(e.response)
                 sys.exit(1)
 
         running = False
@@ -175,80 +128,139 @@ class Instance(object):
         while not running:
             time.sleep(5)
 
-            if self.flux_model:
-                self.spot_request = boto3_ec2_conn.describe_spot_instance_requests(
-                    SpotInstanceRequestIds=[self.request_id]
-                )["SpotInstanceRequests"][0]
-                state = self.spot_request["State"]
+            self.spot_request = boto3_ec2_conn.describe_spot_instance_requests(
+                SpotInstanceRequestIds=[self.request_id]
+            )["SpotInstanceRequests"][0]
+            state = self.spot_request["State"]
 
-                print(
-                    "Spot request {}. Status: {} - {}".format(
-                        self.spot_request["State"],
-                        self.spot_request["Status"]["Code"],
-                        self.spot_request["Status"]["Message"],
-                    )
+            print(
+                "Spot request {}. Status: {} - {}".format(
+                    self.spot_request["State"],
+                    self.spot_request["Status"]["Code"],
+                    self.spot_request["Status"]["Message"],
                 )
-
-            else:
-                self.spot_request = boto_ec2_conn.get_all_spot_instance_requests(self.spot_request.id)[0]
-                state = self.spot_request.state
-
-                print('Spot id {} says: {}'.format(self.spot_request.id, self.spot_request.status.code,
-                                               self.spot_request.status.message))
+            )
 
             if state == 'active':
                 running = True
                 self._tag_request()
 
+    def _configure_instance(self):
+        """
+        Configure instance request
+        """
+
+        # Configuration for flux model spot fleet is different from configuration for other spot instances
+        if self.flux_model == True:
+            print("Creating spot machine from flux model config and launch template")
+
+            self.config = {
+                "IamFleetRole": "arn:aws:iam::838255262149:role/aws-ec2-spot-fleet-tagging-role",
+                "AllocationStrategy": "capacityOptimized",
+                "OnDemandAllocationStrategy": "lowestPrice",
+                "TargetCapacity": 1,
+                "TerminateInstancesWithExpiration": True,
+                "LaunchSpecifications": [],
+                "Type": "request",
+                "LaunchTemplateConfigs": [
+                    {
+                        "LaunchTemplateSpecification": {
+                            "LaunchTemplateId": self.launch_template,   # This contains userdata to initialize machine
+                            "Version": self.launch_template_version
+                        },
+                        "Overrides": [
+                            {
+                                "InstanceType": self.instance_type,
+                                "WeightedCapacity": 1,
+                                "SubnetId": "subnet-00335589f5f424283"
+                            },
+                            {
+                                "InstanceType": self.instance_type,
+                                "WeightedCapacity": 1,
+                                "SubnetId": "subnet-8c2b5ea1"
+                            },
+                            {
+                                "InstanceType": self.instance_type,
+                                "WeightedCapacity": 1,
+                                "SubnetId": "subnet-08458452c1d05713b"
+                            },
+                            {
+                                "InstanceType": self.instance_type,
+                                "WeightedCapacity": 1,
+                                "SubnetId": "subnet-116d9a4a"
+                            },
+                            {
+                                "InstanceType": self.instance_type,
+                                "WeightedCapacity": 1,
+                                "SubnetId": "subnet-037b97cff4493e3a1"
+                            }
+                        ]
+                    }
+                ]
+            }
+
+        else:
+            self.config = {
+                "Type": self.request_type,
+                "DryRun": False,
+                "LaunchSpecification": {
+                    "ImageId": self.ami_id,
+                    "KeyName": self.key_pair,
+                    "InstanceType": self.instance_type,
+                    "NetworkInterfaces": [
+                        {
+                            "AssociatePublicIpAddress": True,
+                            "DeviceIndex": 0,
+                            "SubnetId": "subnet-00335589f5f424283",
+                            "Groups": self.security_group_ids,
+                        }
+                    ],
+                    # Flux model spot machines mount SSD drives. Other series of machines use an EBS volume.
+                    "BlockDeviceMappings": [
+                        {
+                            "DeviceName": "/dev/sda1",
+                            "Ebs": {
+                                "DeleteOnTermination": True,
+                                "VolumeSize": self.disk_size,
+                                "VolumeType": self.volume_type,
+                                "Encrypted": False,
+                            },
+                        }
+                    ]
+                },
+            }
+
+
+        # else:
+        #
+        #     bdm = self.create_hard_disk()
+        #     ip = self.create_ip()
+        #
+        #     self.config = {
+        #               'key_name': self.key_pair,
+        #               'network_interfaces': ip,
+        #               'dry_run': False,
+        #               'instance_type': self.instance_type,
+        #               'block_device_map': bdm,
+        #               }
+
+
 
     @retry(wait_fixed=2000, stop_max_attempt_number=10)
     def wait_for_instance(self):
 
-        if self.flux_model:
+        print("Instance ID is {}".format(self.spot_request["InstanceId"]))
 
-            print("Instance ID is {}".format(self.spot_request["InstanceId"]))
+        ec2 = boto3.resource("ec2")
+        self.instance = ec2.Instance(self.spot_request["InstanceId"])
+        self._tag_instance()
 
-            ec2 = boto3.resource("ec2")
-            self.instance = ec2.Instance(self.spot_request["InstanceId"])
-            self._tag_instance()
+        while self.instance.state == "pending":
+            time.sleep(5)
+            self.instance.reload()
+            print("Instance {} is {}".format(self.instance.id, self.instance.state))
 
-            while self.instance.state == "pending":
-                time.sleep(5)
-                self.instance.reload()
-                print("Instance {} is {}".format(self.instance.id, self.instance.state))
-
-            self._instance_ips()
-
-        else:
-
-            print('Instance ID is {}'.format(self.spot_request.instance_id))
-            reservations = boto_ec2_conn.get_all_reservations(instance_ids=[self.spot_request.instance_id])
-            self.instance = reservations[0].instances[0]
-
-            status = self.instance.update()
-
-            while status == 'pending':
-                time.sleep(5)
-                status = self.instance.update()
-                print('Instance {} is {}'.format(self.instance.id, status))
-
-            print('Server IP is {}'.format(self.instance.ip_address))
-            print('Private IP is {}'.format(self.instance.private_ip_address))
-
-            if not self.ssh_ip:
-                if util.in_office():
-                    self.ssh_ip = self.instance.ip_address
-                else:
-                    print("Based on your IP, it appears that you're out of the office \n" \
-                          "Make sure to connect to the VPN and then ssh/putty using the private IP!")
-                    self.ssh_ip = self.instance.private_ip_address
-
-            instance_tag = 'TEMP-SPOT-{}'.format(self.user)
-            self.instance.add_tag("Name", instance_tag)  # change self.tag to TEMP-<usenrmae> SPOT
-            self.instance.add_tag("Project", self.project)
-            self.instance.add_tag("Pricing", "Spot")
-            self.instance.add_tag("Job", self.job)
-            self.instance.add_tag("User", self.user)
+        self._instance_ips()
 
         print('Sleeping for 30 seconds to make sure server is ready')
         time.sleep(30)
@@ -293,20 +305,13 @@ class Instance(object):
 
     def _tag_request(self):
 
-        if self.flux_model:
+        tags = [
+            {"Key": "User", "Value": self.user},
+            {"Key": "Project", "Value": self.project},
+            {"Key": "Job", "Value": self.job},
+        ]
+        boto3_ec2_conn.create_tags(Resources=[self.request_id], Tags=tags)
 
-            tags = [
-                {"Key": "User", "Value": self.user},
-                {"Key": "Project", "Value": self.project},
-                {"Key": "Job", "Value": self.job},
-            ]
-            boto3_ec2_conn.create_tags(Resources=[self.request_id], Tags=tags)
-
-        else:
-
-            self.spot_request.add_tag('User', self.user)
-            self.spot_request.add_tag('Project', self.project)
-            self.spot_request.add_tag('Job', self.job)
 
     def _tag_instance(self):
         """
@@ -319,6 +324,7 @@ class Instance(object):
             {"Key": "Pricing", "Value": "Spot"},
         ]
         self.instance.create_tags(DryRun=False, Tags=tags)
+
 
     def _instance_ips(self):
         """
