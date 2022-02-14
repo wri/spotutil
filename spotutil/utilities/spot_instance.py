@@ -28,6 +28,11 @@ class Instance(object):
         self.instance = None
         self.ssh_ip = None
         self.user = None
+        self.subnet_id = None
+        self.current_price = None
+        self.zone = None
+        self.request_id = None
+        self.state = None
 
         self.instance_type = instance_type
         self.key_pair = key_pair
@@ -37,6 +42,27 @@ class Instance(object):
         self.flux_model = flux_model
         self.launch_template = launch_template
         self.launch_template_version = launch_template_version
+
+        # windows
+        if os.name == 'nt':
+            self.user = os.getenv('username')
+        else:
+            self.user = os.getenv('USER')
+
+        self.project = "Global Forest Watch"
+        self.job = "Spotutil"
+        self.product_description = "Linux/UNIX (Amazon VPC)"
+        self.volume_type = "gp2"
+        self.request_type = "one-time"
+        self.security_group_ids = ["sg-3e719042", "sg-d7a0d8ad", "sg-6c6a5911"]
+        self.subnet_ids = {
+            "us-east-1a": "subnet-00335589f5f424283",
+            "us-east-1b": "subnet-8c2b5ea1",
+            "us-east-1c": "subnet-08458452c1d05713b",
+            "us-east-1d": "subnet-116d9a4a",
+            "us-east-1e": "subnet-037b97cff4493e3a1",
+            "us-east-1f": "subnet-037b97cff4493e3a1",
+        }
 
         print('Creating a instance type {}'.format(self.instance_type))
 
@@ -119,7 +145,7 @@ class Instance(object):
                 # print("Spot active instances list dict: ", self.spot_request["ActiveInstances"][0])
                 # print("Spot active instances list dict request id: ", self.spot_active_instances['SpotInstanceRequestId'])
 
-            except ClientError as e:
+            except boto3_ec2_conn.ClientError as e:
                 print("Request failed. Please verify if input parameters are valid")
                 print(e.response)
                 sys.exit(1)
@@ -148,22 +174,35 @@ class Instance(object):
 
         while not running:
             time.sleep(5)
-            self.spot_request = boto_ec2_conn.get_all_spot_instance_requests(self.spot_request.id)[0]
-            state = self.spot_request.state
-            print('Spot id {} says: {}'.format(self.spot_request.id, self.spot_request.status.code,
+
+            if self.flux_model:
+                self.spot_request = boto3_ec2_conn.describe_spot_instance_requests(
+                    SpotInstanceRequestIds=[self.request_id]
+                )["SpotInstanceRequests"][0]
+                state = self.spot_request["State"]
+
+                print(
+                    "Spot request {}. Status: {} - {}".format(
+                        self.spot_request["State"],
+                        self.spot_request["Status"]["Code"],
+                        self.spot_request["Status"]["Message"],
+                    )
+                )
+
+            else:
+                self.spot_request = boto_ec2_conn.get_all_spot_instance_requests(self.spot_request.id)[0]
+                state = self.spot_request.state
+
+                print('Spot id {} says: {}'.format(self.spot_request.id, self.spot_request.status.code,
                                                self.spot_request.status.message))
 
             if state == 'active':
                 running = True
-                
-                # windows
-                if os.name == 'nt':
-                    self.user = os.getenv('username')
-                else:
-                    self.user = os.getenv('USER')
-                self.spot_request.add_tag('User', self.user)
-                self.spot_request.add_tag('Project', "Global Forest Watch")
-                self.spot_request.add_tag('Job', "Spotutil")
+
+
+            #     self.spot_request.add_tag('User', self.user)
+            #     self.spot_request.add_tag('Project', "Global Forest Watch")
+            #     self.spot_request.add_tag('Job', "Spotutil")
 
     @retry(wait_fixed=2000, stop_max_attempt_number=10)
     def wait_for_instance(self):
@@ -193,12 +232,12 @@ class Instance(object):
         print('Sleeping for 30 seconds to make sure server is ready')
         time.sleep(30)
 
-        instance_tag = 'TEMP-SPOT-{}'.format(self.user)
-        self.instance.add_tag("Name", instance_tag)  # change self.tag to TEMP-<usenrmae> SPOT
-        self.instance.add_tag("Project", "Global Forest Watch")
-        self.instance.add_tag("Pricing", "Spot")
-        self.instance.add_tag("Job", "Spotutil")
-        self.instance.add_tag("User", self.user)
+        # instance_tag = 'TEMP-SPOT-{}'.format(self.user)
+        # self.instance.add_tag("Name", instance_tag)  # change self.tag to TEMP-<usenrmae> SPOT
+        # self.instance.add_tag("Project", "Global Forest Watch")
+        # self.instance.add_tag("Pricing", "Spot")
+        # self.instance.add_tag("Job", "Spotutil")
+        # self.instance.add_tag("User", self.user)
 
         self.check_instance_ready()
         
@@ -216,10 +255,9 @@ class Instance(object):
     def create_ip(self):
 
         subnet_id = 'subnet-116d9a4a'
-        security_group_ids = ['sg-3e719042', 'sg-d7a0d8ad', 'sg-6c6a5911']
 
         interface = boto.ec2.networkinterface.NetworkInterfaceSpecification(subnet_id=subnet_id,
-                                                                    groups=security_group_ids,
+                                                                    groups=self.security_group_ids,
                                                                     associate_public_ip_address=True)
         interfaces = boto.ec2.networkinterface.NetworkInterfaceCollection(interface)
 
