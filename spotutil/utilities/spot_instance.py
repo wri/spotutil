@@ -198,11 +198,8 @@ class Instance(object):
 
             if state == 'active':
                 running = True
+                self._tag_request()
 
-
-            #     self.spot_request.add_tag('User', self.user)
-            #     self.spot_request.add_tag('Project', "Global Forest Watch")
-            #     self.spot_request.add_tag('Job', "Spotutil")
 
     @retry(wait_fixed=2000, stop_max_attempt_number=10)
     def wait_for_instance(self):
@@ -276,3 +273,20 @@ class Instance(object):
             except Exception as e: 
                 print("something's wrong with %s:%d. Exception is %s" % (self.ssh_ip, port, e))
                 time.sleep(10)
+
+    def _tag_request(self):
+
+        if self.flux_model:
+
+            tags = [
+                {"Key": "User", "Value": self.user},
+                {"Key": "Project", "Value": self.project},
+                {"Key": "Job", "Value": self.job},
+            ]
+            boto3_ec2_conn.create_tags(Resources=[self.request_id], Tags=tags)
+
+        else:
+
+            self.spot_request.add_tag('User', self.user)
+            self.spot_request.add_tag('Project', self.project)
+            self.spot_request.add_tag('Job', self.job)
