@@ -59,4 +59,3 @@ def listspot():
 
     else:
         print("No active Spot requests found.")
-

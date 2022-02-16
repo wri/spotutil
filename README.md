@@ -54,6 +54,7 @@ r5d.large, r5d.xlarge, r5d.2xlarge, r5d.4xlarge, r5d.8xlarge, r5d.12xlarge, r5d.
 For `<key_pair>` use name for any key pair registered with your AWS account. 
 Make sure you are in possession of the private key. You will need it to SSH into the machine
 
+
 ####Creating and Puttying into r5d instances
 
 Providing an r5d instance type automatically launches an instance configured to run the forest carbon flux model,
@@ -73,7 +74,6 @@ instead of your `<username>_wri.ppk`. r5d instances require r5d_ec2.ppk instead 
 due to the launch template being used. Still use your personal key_pair in the command line
 when you create the spot instance, though; this is just a change to what is supplied to Putty. Ask David Gibbs or Erin
 Glen for this specific ppk.
-
 
 ### List the active spots instances
 

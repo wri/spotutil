@@ -37,4 +37,3 @@ def list_spots():
 @click.option('--instance_type', help='The instance type (e.g., m4.large, r4.2xlarge, r5d.24xlarge)')
 def remove_spot(username, internal_ip, external_ip, instance_type):
     removespot.removespot(username, internal_ip, external_ip, instance_type)
-

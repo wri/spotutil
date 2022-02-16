@@ -7,5 +7,3 @@ def newspot(instance_type, key_pair, price, disk_size, ami_id, flux_model, launc
                                       flux_model, launch_template, launch_template_version)
 
     instance.start()
-
-
