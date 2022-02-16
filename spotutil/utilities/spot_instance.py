@@ -116,7 +116,7 @@ class Instance(object):
         # Gets correct configuration for ec2 instance: m4/r4 or r5d (for carbon flux model)
         self._configure_instance()
 
-        # Flux model and non-flux model instances are created by different routes:
+        # Flux model (r5d instances) and non-flux model instances are created by different routes:
         # fleet request vs. instance request, respectively
         if self.flux_model:
             print('Requesting flux model spot instance')
@@ -125,32 +125,38 @@ class Instance(object):
                 # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.request_spot_fleet
                 self.spot_fleet_request = ec2_conn.request_spot_fleet(SpotFleetRequestConfig={**self.config})
 
-                # Because it takes several seconds for an instance to be created in the fleet,
-                # the instance information can't be retrieved immediately.
-                print("Waiting 15 seconds for flux model spot fleet to be created before obtaining instance ID")
-                time.sleep(15)
-
-                # Obtains information on instances in the spot fleet
-                # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.describe_spot_fleet_instances
-                self.spot_request = ec2_conn.describe_spot_fleet_instances(
-                    SpotFleetRequestId=self.spot_fleet_request["SpotFleetRequestId"]
-                )
-
-                # Obtains the SpotInstanceRequestId for the one instance created from the spot fleet request.
-                # This is the same variable as created for non-flux model spot instance requests.
-                self.spot_active_instances = self.spot_request["ActiveInstances"][0]
-                self.request_id = self.spot_request["ActiveInstances"][0]['SpotInstanceRequestId']
-
-                # print("Spot instances full: ", self.spot_request)
-                # print("Spot active instance list: ", self.spot_request["ActiveInstances"])
-                # print("Spot active instances list dict: ", self.spot_request["ActiveInstances"][0])
-                # print("Spot active instances list dict request id: ", self.spot_active_instances['SpotInstanceRequestId'])
-
             except ClientError as e:
                 print("Request failed. Please verify if input parameters are valid")
                 print(e.response)
                 sys.exit(1)
 
+            # Because it takes several seconds for an instance to be created in the fleet,
+            # the instance information can't be retrieved immediately.
+            print("Waiting 15 seconds for flux model spot fleet to be created before obtaining instance ID")
+            time.sleep(15)
+
+            # Tries several times to get ID. This keeps the process from appearing to fail (no instance ID and IP
+            # address returned) but the spot machine is still created.
+            for i in range(1, 20):
+                try:
+                    # Obtains information on instances in the spot fleet
+                    # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.describe_spot_fleet_instances
+                    self.spot_request = ec2_conn.describe_spot_fleet_instances(
+                        SpotFleetRequestId=self.spot_fleet_request["SpotFleetRequestId"]
+                    )
+
+                    # Obtains the SpotInstanceRequestId for the one instance created from the spot fleet request.
+                    # This is the same variable as created for non-flux model spot instance requests.
+                    self.spot_active_instances = self.spot_request["ActiveInstances"][0]
+                    self.request_id = self.spot_request["ActiveInstances"][0]['SpotInstanceRequestId']
+
+                    continue
+
+                except Exception:
+                    print("Cannot acquire flux instance ID yet. Waiting 10 seconds to try again.")
+                    time.sleep(10)
+
+        # For non-r5d instances
         else:
             print('Requesting spot instance')
 
@@ -164,6 +170,7 @@ class Instance(object):
                 print("Request failed. Please verify if input parameters are valid")
                 print(e.response)
                 sys.exit(1)
+
 
         running = False
 
