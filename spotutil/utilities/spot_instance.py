@@ -15,6 +15,7 @@ from . import util
 
 ec2_conn = boto3.client('ec2', region_name='us-east-1')
 
+
 class Instance(object):
     def __init__(self, instance_type, key_pair, price, disk_size, ami_id,
                  flux_model, launch_template, launch_template_version):
@@ -76,7 +77,6 @@ class Instance(object):
             )
         )
 
-
     def _get_best_price(self):
         """
         Checks for current prices and select subnet in zone with lowest price
@@ -102,11 +102,9 @@ class Instance(object):
         self.subnet_id = self.subnet_ids[best_price[0]]
         self.current_price = best_price[1]
 
-
     def start(self):
         self.make_request()
         self.wait_for_instance()
-
 
     def make_request(self):
         """
@@ -171,7 +169,6 @@ class Instance(object):
                 print(e.response)
                 sys.exit(1)
 
-
         running = False
 
         while not running:
@@ -189,7 +186,6 @@ class Instance(object):
                     )
                 )
                 sys.exit(1)
-
 
     def _configure_instance(self):
         """
@@ -211,7 +207,7 @@ class Instance(object):
                 "LaunchTemplateConfigs": [
                     {
                         "LaunchTemplateSpecification": {
-                            "LaunchTemplateId": self.launch_template,   # This contains userdata to initialize machine
+                            "LaunchTemplateId": self.launch_template,  # This contains userdata to initialize machine
                             "Version": self.launch_template_version
                         },
                         # r5d instances do not work in region us-east-1f, so not provided as a possibility
@@ -277,7 +273,6 @@ class Instance(object):
                 },
             }
 
-
     def _update_request_state(self):
         """
         Check state of request and update self.state
@@ -299,7 +294,6 @@ class Instance(object):
             )
         )
 
-
     @retry(wait_fixed=2000, stop_max_attempt_number=10)
     def wait_for_instance(self):
 
@@ -320,7 +314,6 @@ class Instance(object):
         time.sleep(30)
 
         self.check_instance_ready()
-        
 
     def check_instance_ready(self):
         """
@@ -331,14 +324,13 @@ class Instance(object):
         port = 22  # port number is a number, not string
         for i in range(1, 1000):
             try:
-                s.connect((self.ssh_ip, port)) 
+                s.connect((self.ssh_ip, port))
                 print('Machine is taking ssh connections!')
                 break
-                
-            except Exception as e: 
+
+            except Exception as e:
                 print("Something's wrong with %s:%d. Exception is %s" % (self.ssh_ip, port, e))
                 time.sleep(10)
-
 
     def _tag_request(self):
         """
@@ -352,7 +344,6 @@ class Instance(object):
         ]
         ec2_conn.create_tags(Resources=[self.request_id], Tags=tags)
 
-
     def _tag_instance(self):
         """
         Adds tags to instance for internal accounting
@@ -364,7 +355,6 @@ class Instance(object):
             {"Key": "Pricing", "Value": "Spot"},
         ]
         self.instance.create_tags(DryRun=False, Tags=tags)
-
 
     def _instance_ips(self):
         """
