@@ -43,15 +43,18 @@ Once setup is complete, the tool can be run from any directory.
 
 ## Using spotutil
 
-**Create a spot instance** 
+###Create a spot instance
 
-`spotutil new m4.large <key_pair>`
+`spotutil new <instance_type> <key_pair>`
 
 Instance types commonly used: m4.large, m4.xlarge, m4.2xlarge, m4.4xlarge, m4.10xlarge, m4.16xlarge,
 r4.large, r4.xlarge, r4.2xlarge, r4.4xlarge, r4.8xlarge, r4.16xlarge,
 r5d.large, r5d.xlarge, r5d.2xlarge, r5d.4xlarge, r5d.8xlarge, r5d.12xlarge, r5d.16xlarge, r5d.24xlarge.
 
-For `<key_pair>` use name for any key pair registered with your AWS account. Make sure you are in posession of the private key. You will need it to SSH into the machine
+For `<key_pair>` use name for any key pair registered with your AWS account. 
+Make sure you are in possession of the private key. You will need it to SSH into the machine
+
+####Creating and Puttying into r5d instances
 
 Providing an r5d instance type automatically launches an instance configured to run the forest carbon flux model,
 including all the user data found in the launch template.
@@ -61,12 +64,25 @@ also optionally be specified if the user does not want to use the default templa
 carbon_flux_model_python3_v2 
 (https://console.aws.amazon.com/ec2/v2/home?region=us-east-1#LaunchTemplateDetails:launchTemplateId=lt-00205de607ab6d4d9).
 
+If you create an r5d instance, you must Putty into it within the first two or three minutes after it is created.
+For unclear reasons, r5d instances block new Putty connections after a few minutes.
+(The error box says: "Network error: Software caused connection abort.")
 
-**List the active spots instances** 
+Also, when Puttying into r5d instances, supply the r5d_ec2.ppk for Connection -> SSH -> Auth -> Private Key File  
+instead of your `<username>_wri.ppk`. r5d instances require r5d_ec2.ppk instead of `<username>_wri.ppk`
+due to the launch template being used. Still use your personal key_pair in the command line
+when you create the spot instance, though; this is just a change to what is supplied to Putty. Ask David Gibbs or Erin
+Glen for this specific ppk.
+
+
+### List the active spots instances
 
 `spotutil ls`
 
-**Remove an active spot instance*
+This shows a table of all active spot instances, with columns showing the user,
+instance type, internal IP address, external IP address, and up time. 
+
+### Remove an active spot instance
 
 Multiple instances can be deleted at the same time using the username or instance type arguments. 
 
