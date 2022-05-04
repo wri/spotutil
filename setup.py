@@ -6,9 +6,9 @@ with open("README.md", "r") as fh:
 setup(
     name="spotutil",
     version="0.1.0",
-    author="Charlie Hofmann, Thomas Maschler",
-    author_email="thomas.maschler@wri.org",
-    description="Create an AWS Spot request. View active Spot instances",
+    author="Charlie Hofmann, Thomas Maschler, David Gibbs",
+    author_email="david.gibbs@wri.org",
+    description="Create an AWS ec2 spot request. View active spot instances. Delete active spot instances",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/wri/spotutil",
