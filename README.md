@@ -36,7 +36,7 @@ Default output format: json
 
 The tool is written to be run from any directory. There are two ways to install it as a system command that can be run from anywhere.
 
-1. `pip install git+http://github.com/wri/spotutil`
+1. `pip install git+http://github.com/wri/spotutil` (preferred, simpler option)
 2. In the folder where spotutil is located on your computer (e.g., C:\Users\xyz\Git\spotutil): `pip install .` (requires pip)
 
 Once setup is complete, the tool can be run from any directory.
@@ -58,15 +58,12 @@ Make sure you are in possession of the private key. You will need it to SSH into
 
 Providing an r5d instance type automatically launches an instance configured to run the forest carbon flux model,
 including all the user data found in the launch template.
-The `--carbon-flux` flag can optionally be added to r5d instances. The `--carbon-flux` flag cannot be added to other
+The `--carbon-flux` flag can optionally be added to r5d instances, although it is implied by the selection of an
+r5d instance type. The `--carbon-flux` flag cannot be added to other
 instance type requests. (e.g., m4 and r4). For flux model runs, `--launch-template` and `--launch-template-version` can
 also optionally be specified if the user does not want to use the default template or version. The current template is
 carbon_flux_model_python3_v2 
 (https://console.aws.amazon.com/ec2/v2/home?region=us-east-1#LaunchTemplateDetails:launchTemplateId=lt-00205de607ab6d4d9).
-
-If you create an r5d instance, you must Putty into it within the first two or three minutes after it is created.
-For unclear reasons, r5d instances block new Putty connections after a few minutes.
-(The error box says: "Network error: Software caused connection abort.")
 
 Also, when Puttying into r5d instances, supply the r5d_ec2.ppk for Connection -> SSH -> Auth -> Private Key File  
 instead of your `<username>_wri.ppk`. r5d instances require r5d_ec2.ppk instead of `<username>_wri.ppk`
