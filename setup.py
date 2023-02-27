@@ -15,6 +15,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         "click",
+        "boto==2.49.0",
         "botocore",
         "boto3",
         "prettytable",
