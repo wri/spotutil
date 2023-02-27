@@ -194,7 +194,7 @@ class Instance(object):
 
         # Configuration for flux model spot fleet is different from configuration for other spot instances
         if self.flux_model == True:
-            print("Creating spot machine from flux model config and launch template")
+            print(f"Creating spot machine from flux model config and launch template version {self.launch_template_version}")
 
             self.config = {
                 "IamFleetRole": "arn:aws:iam::838255262149:role/aws-ec2-spot-fleet-tagging-role",
