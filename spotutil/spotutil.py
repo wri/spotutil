@@ -18,10 +18,11 @@ def spotutil():
 @click.option('--flux-model', is_flag=True)   # Denotes if a spot instance for the carbon flux model should be created
 @click.option('--launch-template', default='lt-00205de607ab6d4d9')  # ec2 launch template to use for flux model instance
 @click.option('--launch-template-version', default="29") # version of ec2 launch template to use for flux model instance
+@click.option('--use-on-demand', is_flag=True, default=False)
 def new_spot(instance_type, key_pair, price, disk_size, ami_id,
-             flux_model, launch_template, launch_template_version):
+             flux_model, launch_template, launch_template_version, use_on_demand):
     newspot.newspot(instance_type, key_pair, price, disk_size, ami_id,
-                    flux_model, launch_template, launch_template_version)
+                    flux_model, launch_template, launch_template_version, use_on_demand)
 
 
 @spotutil.command('ls')

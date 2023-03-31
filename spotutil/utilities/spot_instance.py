@@ -18,7 +18,7 @@ ec2_conn = boto3.client('ec2', region_name='us-east-1')
 
 class Instance(object):
     def __init__(self, instance_type, key_pair, price, disk_size, ami_id,
-                 flux_model, launch_template, launch_template_version):
+                 flux_model, launch_template, launch_template_version, use_on_demand):
 
         cwd = os.path.dirname(os.path.realpath(__file__))
         self.root_dir = os.path.dirname(cwd)
@@ -41,6 +41,7 @@ class Instance(object):
         self.flux_model = flux_model
         self.launch_template = launch_template
         self.launch_template_version = launch_template_version
+        self.use_on_demand = use_on_demand
 
         if os.name == 'nt':
             self.user = os.getenv('username')
@@ -69,13 +70,20 @@ class Instance(object):
         if self.series == "r5d":
             self.flux_model = True
 
-        self._get_best_price()
-
-        print(
-            "Creating an instance type {} in zone {}. Current price: ${}".format(
-                self.instance_type, self.zone, self.current_price
+        # Theoretically, provides the information to run an on-demand instance. Not tested yet.
+        if use_on_demand:
+            self.zone = "us-east-1c"
+            self.launch_template_version = 30
+            print(
+                f"Creating on-demand instance type {self.instance_type} in zone {self.zone} using template version {self.launch_template_version}."
             )
-        )
+
+        else:
+            print("Creating spot instance")
+            self._get_best_price()
+            print(
+                f"Creating a spot instance type {self.instance_type} in zone {self.zone}. Current price: ${self.current_price}"
+            )
 
     def _get_best_price(self):
         """
@@ -103,10 +111,14 @@ class Instance(object):
         self.current_price = best_price[1]
 
     def start(self):
-        self.make_request()
-        self.wait_for_instance()
 
-    def make_request(self):
+        if self.use_on_demand:
+            print("On demand")
+        else:
+            self.make_spot_request()
+            self.wait_for_spot_instance()
+
+    def make_spot_request(self):
         """
         Requests spot instance creation
         """
@@ -295,7 +307,7 @@ class Instance(object):
         )
 
     @retry(wait_fixed=2000, stop_max_attempt_number=10)
-    def wait_for_instance(self):
+    def wait_for_spot_instance(self):
 
         print("Instance ID is {}".format(self.spot_request["InstanceId"]))
 
