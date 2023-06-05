@@ -113,7 +113,11 @@ class Instance(object):
     def start(self):
 
         if self.use_on_demand:
-            print("On demand")
+            print("On demand branch")
+            self.make_on_demand_request()
+            print("Made request")
+            self.wait_for_spot_instance()
+            print("Waiting for request")
         else:
             self.make_spot_request()
             self.wait_for_spot_instance()
@@ -124,7 +128,7 @@ class Instance(object):
         """
 
         # Gets correct configuration for ec2 instance: m4/r4 or r5d (for carbon flux model)
-        self._configure_instance()
+        self._configure_spot_instance()
 
         # Flux model (r5d instances) and non-flux model instances are created by different routes:
         # fleet request vs. instance request, respectively
@@ -199,7 +203,88 @@ class Instance(object):
                 )
                 sys.exit(1)
 
-    def _configure_instance(self):
+    def make_on_demand_request(self):
+        """
+        Requests on-demand instance creation
+        """
+
+        # Gets correct configuration for ec2 instance: m4/r4 or r5d (for carbon flux model)
+        self._configure_on_demand_instance()
+
+        # Flux model (r5d instances) and non-flux model instances are created by different routes:
+        # fleet request vs. instance request, respectively
+        if self.flux_model:
+            print('Requesting flux model spot instance')
+
+            try:
+                # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.request_spot_fleet
+                self.on_demand_request = ec2_conn.request_spot_fleet(SpotFleetRequestConfig={**self.config})
+
+            except ClientError as e:
+                print("Request failed. Please verify if input parameters are valid")
+                print(e.response)
+                sys.exit(1)
+
+            # Because it takes several seconds for an instance to be created in the fleet,
+            # the instance information can't be retrieved immediately.
+            print("Waiting 15 seconds for flux model spot fleet to be created before obtaining instance ID")
+            time.sleep(15)
+
+            # Tries several times to get ID. This keeps the process from appearing to fail (no instance ID and IP
+            # address returned) but the spot machine is still created.
+            for i in range(1, 20):
+                try:
+                    # Obtains information on instances in the spot fleet
+                    # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.describe_spot_fleet_instances
+                    self.spot_request = ec2_conn.describe_spot_fleet_instances(
+                        SpotFleetRequestId=self.spot_fleet_request["SpotFleetRequestId"]
+                    )
+
+                    # Obtains the SpotInstanceRequestId for the one instance created from the spot fleet request.
+                    # This is the same variable as created for non-flux model spot instance requests.
+                    self.spot_active_instances = self.spot_request["ActiveInstances"][0]
+                    self.request_id = self.spot_request["ActiveInstances"][0]['SpotInstanceRequestId']
+
+                    continue
+
+                except Exception:
+                    print("Cannot acquire flux instance ID yet. Waiting 10 seconds to try again.")
+                    time.sleep(10)
+
+        # For non-r5d instances
+        else:
+            print('Requesting spot instance')
+
+            # https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/ec2.html#EC2.Client.request_spot_instances
+            try:
+                self.spot_request = ec2_conn.request_spot_instances(**self.config)[
+                    "SpotInstanceRequests"
+                ][0]
+                self.request_id = self.spot_request["SpotInstanceRequestId"]
+            except ClientError as e:
+                print("Request failed. Please verify if input parameters are valid")
+                print(e.response)
+                sys.exit(1)
+
+        running = False
+
+        while not running:
+            self._update_request_state()
+
+            if self.state == "active":
+                running = True
+                self._tag_request()
+
+            elif self.state == "failed":
+                print(
+                    "{} - {}".format(
+                        self.spot_request["Fault"]["Code"],
+                        self.spot_request["Fault"]["Message"],
+                    )
+                )
+                sys.exit(1)
+
+    def _configure_spot_instance(self):
         """
         Configures instance request
         """
@@ -284,6 +369,39 @@ class Instance(object):
                     ]
                 },
             }
+
+    def _configure_on_demand_instance(self):
+        """
+        Configures instance request
+        """
+
+        # Configuration for flux model spot fleet is different from configuration for other spot instances
+        if self.flux_model == True:
+            print(
+                f"Creating on-demand machine from flux model config and launch template version {self.launch_template_version}")
+
+            self.config = {
+                  "MaxCount": 1,
+                  "MinCount": 1,
+                  "ImageId": "ami-08f3d892de259504d",
+                  "InstanceType": "r5d.24xlarge",
+                  "SubnetId": "subnet-08458452c1d05713b",
+                  "KeyName": "r5d_ec2",
+                  "EbsOptimized": false,
+                  "UserData": "IyEvYmluL2Jhc2gKeXVtIGluc3RhbGwgLXkgcnN5bmMgZ2l0IG5hbm8gaHRvcCB0bXV4CgojIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMKIyBNb3VudCB0aGUgZXBoZW1lcmFsIFNTRCBzdG9yYWdlLgojIElmIGZvdXIgdm9sdW1lcyBleGlzdCwgbWVyZ2UgdGhlbSBhbmQgbW91bnQgam9pbnRseS4KIyBJZiBvbmx5IHR3byB2b2x1bWVzIGV4aXN0LCBtZXJnZSB0aGVtIGFuZCBtb3VudCBqb2ludGx5LgojIElmIG9ubHkgb25lIHZvbHVtZSBleGlzdHMsIGp1c3QgbW91bnQgdGhhdC4gCiMgUmVnYXJkbGVzcyBvZiBob3cgbWFueSB2b2x1bWVzIHRoZXJlIGFyZSwgdGhlIG5hbWUgb2YgdGhlIGZvbGRlciB0aGV5IGFyZSBtb3VudGVkIHRvIGlzIHRoZSBzYW1lLiAKIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjCiMgTmFtZSBvZiB0aGUgc2Vjb25kIHZvbHVtZSAoaWYgaXQgZXhpc3RzKQpTU0QyPW52bWUybjEKCiMgTmFtZSBvZiB0aGUgZm91cnRoIHZvbHVtZSAoaWYgaXQgZXhpc3RzKQpTU0Q0PW52bWU0bjEKCiMgQ2hlY2tzIGlmIHRoZSBzZWNvbmQgdm9sdW1lIGV4aXN0cwpDSEVDSzI9JChsc2JsayAtbCB8IGdyZXAgJFNTRDIpCgojIENoZWNrcyBpZiB0aGUgZm91cnRoIHZvbHVtZSBleGlzdHMKQ0hFQ0s0PSQobHNibGsgLWwgfCBncmVwICRTU0Q0KQoKIyBDaGVja3MgZm9yIGZvdXIgdm9sdW1lcyBmaXJzdCwgdGhlbiBmb3IgdHdvIHZvbHVtZXMKaWYgW1sgJENIRUNLNCBdXQp0aGVuCiAgIyBGb3VydGggU1NEIHZvbHVtZSBmb3VuZAogICMgRm9sbG93cyBodHRwczovL29iamVjdGl2ZWZzLmNvbS9ob3d0by9ob3ctdG8tcmFpZC1lYzItaW5zdGFuY2Utc3RvcmVzCiAgc3VkbyBtZGFkbSAtLWNyZWF0ZSAtLXZlcmJvc2UgL2Rldi9tZDAgLS1sZXZlbD0wIC0tbmFtZT1NWV9SQUlEIC0tY2h1bms9NjQgLS1yYWlkLWRldmljZXM9NCAvZGV2L252bWUxbjEgL2Rldi9udm1lMm4xIC9kZXYvbnZtZTNuMSAvZGV2L252bWU0bjEgICNyZXF1aXJlcyBzdXBlcnVzZXIgc3RhdHVzIHRvIHVzZSBzdWRvLCBhbmQgZG9lc24ndCB3b3JrIHdpdGhvdXQgc3VkbwogIHN1ZG8gbWtmcy5leHQ0IC1MIE1ZX1JBSUQgL2Rldi9tZDAgICNyZXF1aXJlcyBzdWRvIHRvIGRldGVybWluZSBmaWxlIHN5c3RlbSBzaXplCiAgc3VkbyBta2RpciAtcCAvbW50L2V4dCAgIyBkb2VzbuKAmXQgbmVlZCBzdWRvIGJ1dCBhZGRpbmcgZm9yIGNvbnNpc3RlbmN5CiAgc3VkbyBtb3VudCAtdCBleHQ0IC9kZXYvbWQwIC9tbnQvZXh0ICAjIG5lZWRzIHN1ZG8gYmVjYXVzZSBvbmx5IHJvb3QgY2FuIHVzZSAtLXR5cGVzIG9wdGlvbgoKZWxpZiBbWyAkQ0hFQ0syIF1dCnRoZW4KICAjIFNlY29uZCBTU0Qgdm9sdW1lIGZvdW5kCiAgIyBGb2xsb3dzIGh0dHBzOi8vb2JqZWN0aXZlZnMuY29tL2hvd3RvL2hvdy10by1yYWlkLWVjMi1pbnN0YW5jZS1zdG9yZXMKICBzdWRvIG1kYWRtIC0tY3JlYXRlIC0tdmVyYm9zZSAvZGV2L21kMCAtLWxldmVsPTAgLS1uYW1lPU1ZX1JBSUQgLS1jaHVuaz02NCAtLXJhaWQtZGV2aWNlcz0yIC9kZXYvbnZtZTFuMSAvZGV2L252bWUybjEgICAjcmVxdWlyZXMgc3VwZXJ1c2VyIHN0YXR1cyB0byB1c2Ugc3VkbywgYW5kIGRvZXNuJ3Qgd29yayB3aXRob3V0IHN1ZG8KICBzdWRvIG1rZnMuZXh0NCAtTCBNWV9SQUlEIC9kZXYvbWQwICAjcmVxdWlyZXMgc3VkbyB0byBkZXRlcm1pbmUgZmlsZSBzeXN0ZW0gc2l6ZQogIHN1ZG8gbWtkaXIgLXAgL21udC9leHQgICMgZG9lc27igJl0IG5lZWQgc3VkbyBidXQgYWRkaW5nIGZvciBjb25zaXN0ZW5jeQogIHN1ZG8gbW91bnQgLXQgZXh0NCAvZGV2L21kMCAvbW50L2V4dCAgIyBuZWVkcyBzdWRvIGJlY2F1c2Ugb25seSByb290IGNhbiB1c2UgLS10eXBlcyBvcHRpb24KCmVsc2UKICAjIE9ubHkgb25lIFNTRCB2b2x1bWUKICBta2ZzLmV4dDQgL2Rldi9udm1lMW4xCiAgbWtkaXIgLXAgL21udC9leHQKICBtb3VudCAtdCBleHQ0IC9kZXYvbnZtZTFuMSAvbW50L2V4dApmaQoKCiMgbWFrZSB0ZW1wIGRpcmVjdG9yeSBmb3IgY29udGFpbmVycyB1c2FnZQojIHNob3VsZCBiZSB1c2VkIGluIHRoZSBCYXRjaCBqb2IgZGVmaW5pdGlvbiAoTW91bnRQb2ludHMpCm1rZGlyIC9tbnQvZXh0L3RtcApyc3luYyAtYXZQSFNYIC90bXAvIC9tbnQvZXh0L3RtcC8gCgpta2RpciAtcCAvdmFyL2xpYi9kb2NrZXIKbWtkaXIgLXAgL21udC9leHQvZG9ja2VyCgojIG1vZGlmeSBmc3RhYiB0byBtb3VudCAvdG1wIG9uIHRoZSBuZXcgc3RvcmFnZS4Kc2VkIC1pICckIGEgL21udC9leHQvdG1wICAvdG1wICBub25lICBiaW5kICAwIDAnIC9ldGMvZnN0YWIKc2VkIC1pICckIGEgL21udC9leHQvZG9ja2VyIC92YXIvbGliL2RvY2tlciBub25lICBiaW5kICAwIDAnIC9ldGMvZnN0YWIKbW91bnQgLWEKCiMgbWFrZSAvdG1wIHVzYWJsZSBieSBldmVyeW9uZQpjaG1vZCA3NzcgL21udC9leHQvdG1wCgojIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMKIyBJbnN0YWxsIGRvY2tlciBhbmQgZG9ja2VyLWNvbXBvc2UsIHBlciBodHRwczovL2FjbG91ZHhwZXJ0LmNvbS9ob3ctdG8taW5zdGFsbC1kb2NrZXItY29tcG9zZS1vbi1hbWF6b24tbGludXgtYW1pLwojIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMKCnl1bSBpbnN0YWxsIC15IGRvY2tlcgoKY3VybCAtTCBodHRwczovL2dpdGh1Yi5jb20vZG9ja2VyL2NvbXBvc2UvcmVsZWFzZXMvZG93bmxvYWQvMS4yNS40L2RvY2tlci1jb21wb3NlLWB1bmFtZSAtc2AtYHVuYW1lIC1tYCB8IHN1ZG8gdGVlIC91c3IvbG9jYWwvYmluL2RvY2tlci1jb21wb3NlID4gL2Rldi9udWxsCmNobW9kICt4IC91c3IvbG9jYWwvYmluL2RvY2tlci1jb21wb3NlCmxuIC1zIC91c3IvbG9jYWwvYmluL2RvY2tlci1jb21wb3NlIC91c3IvYmluL2RvY2tlci1jb21wb3NlCmRvY2tlci1jb21wb3NlIC0tdmVyc2lvbgoKIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMKIyBDbG9uZSBsYXRlc3QgZmx1eCBtb2RlbCByZXBvIHRvIHRoZSBob21lIGZvbGRlcgojIGNsb25lIGNvbW1hbmQgc3VnZ2VzdGVkIGJ5IExvZ2FuIEJ5ZXJzLiBJdCByZXNvbHZlcyB0aGUgcHJvYmxlbSBvZiBub3QgYmVpbmcgYWJsZSB0byBwdWxsIHRoZSByZXBvIGFmdGVyIGl0IHdhcyBjbG9uZWQsIHdoaWNoIHdhcyBjb25mbGljdGluZyB3aXRoIG5vdCBiZWluZyBhYmxlIHRvIFNTSCBpbnRvIHRoZSBtYWNoaW5lIG1vcmUgdGhhbiB+MSBtaW51dGUgYWZ0ZXIgaXQgd2FzIGNyZWF0ZWQuCiMgVGhpcyBmb3JtdWxhdGlvbiBvZiBnaXQgY2xvbmUgbWFrZXMgZWMyLXVzZXIgdGhlIGNsb25lciwgcmF0aGVyIHRoYW4gcm9vdC4gSXQncyBubyBsb25nZXIgbmVjZXNzYXJ5IHRvIGNoYW5nZSBvd25lcnNoaXAgKGNob3duKSBvZiB0aGUgcmVwbyBiZWNhdXNlIGNhcmJvbi1idWRnZXQgd2lsbCBhbHJlYWR5IGJlIG93bmVkIGJ5IGVjMi11c2VyLCBub3Qgcm9vdC4KIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMKY2QgL2hvbWUvZWMyLXVzZXIKc3UgZWMyLXVzZXIgLWMgImdpdCBjbG9uZSBodHRwczovL2dpdGh1Yi5jb20vd3JpL2NhcmJvbi1idWRnZXQiCgojIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMKIyBTdGFydHMgdGhlIGRvY2tlciBzZXJ2aWNlCiMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIwpzdWRvIHNlcnZpY2UgZG9ja2VyIHN0YXJ0CgojIFJlcGxhY2VzIGh0b3AgY29uZmlnIGZpbGUgd2l0aCBteSBwcmVmZXJyZWQgY29uZmlndXJhdGlvbgpta2RpciAtcCAvaG9tZS9lYzItdXNlci8uY29uZmlnL2h0b3AvCmNwIC9ob21lL2VjMi11c2VyL2NhcmJvbi1idWRnZXQvaHRvcHJjIC9ob21lL2VjMi11c2VyLy5jb25maWcvaHRvcC9odG9wcmM=",
+                  "LaunchTemplate": {
+                    "LaunchTemplateId": "lt-00205de607ab6d4d9",
+                    "Version": "30"
+                  },
+                  "SecurityGroupIds": [
+                    "sg-3e719042",
+                    "sg-d7a0d8ad",
+                    "sg-6c6a5911"
+                  ]
+                }
+
+        else:
+            print("Not flux model")
 
     def _update_request_state(self):
         """
